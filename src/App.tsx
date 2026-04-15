@@ -296,46 +296,46 @@ export default function App() {
   return (
     <main className="ephemeris-page">
       <div className="solar-system-container">
-        <div className="camera-indicator" data-testid="camera-state">
-          {currentCameraLabel.toUpperCase()} ({currentStep}/
-          {CAMERA_STATE_ORDER.length})
+        <div className="scene-stage">
+          {combinedError && (
+            <div className="error-overlay" role="alert">
+              Error: {combinedError.message}
+            </div>
+          )}
+
+          {(isLoadingEphemeris || isLoadingOrbits) && !solarSystemData && (
+            <div className="loading-overlay">
+              <div className="loader"></div>
+              <span>Loading browser-side ephemeris&hellip;</span>
+            </div>
+          )}
+
+          {solarSystemData && (
+            <Suspense
+              fallback={
+                <div className="loading-overlay">
+                  <div className="loader"></div>
+                  <span>Loading 3D scene&hellip;</span>
+                </div>
+              }
+            >
+              <SolarSystemView
+                solarSystem={solarSystemData.solarSystem}
+                cameras={solarSystemData.cameras}
+                currentState={currentCameraState}
+                surfacePoint={solarSystemData.surfacePoint}
+              />
+            </Suspense>
+          )}
         </div>
-
-        {combinedError && (
-          <div className="error-overlay" role="alert">
-            Error: {combinedError.message}
-          </div>
-        )}
-
-        {(isLoadingEphemeris || isLoadingOrbits) && !solarSystemData && (
-          <div className="loading-overlay">
-            <div className="loader"></div>
-            <span>Loading browser-side ephemeris&hellip;</span>
-          </div>
-        )}
-
-        {solarSystemData && (
-          <Suspense
-            fallback={
-              <div className="loading-overlay">
-                <div className="loader"></div>
-                <span>Loading 3D scene&hellip;</span>
-              </div>
-            }
-          >
-            <SolarSystemView
-              solarSystem={solarSystemData.solarSystem}
-              cameras={solarSystemData.cameras}
-              currentState={currentCameraState}
-              surfacePoint={solarSystemData.surfacePoint}
-            />
-          </Suspense>
-        )}
 
         <div className="hud-card hud-card--timeline">
           <div className="timeline-header">
             <div>
-              <p className="hud-label">Visible date</p>
+              <p className="timeline-view-indicator" data-testid="camera-state">
+                {currentCameraLabel.toUpperCase()} ({currentStep}/
+                {CAMERA_STATE_ORDER.length})
+              </p>
               <strong>{displayDate}</strong>
               {dayOffset !== 0 && (
                 <span className="timeline-offset">
@@ -354,6 +354,7 @@ export default function App() {
           <div className="timeline-toolbar">
             <div className="timeline-controls timeline-controls--compact">
               <button
+                aria-label="Previous"
                 className="timeline-button"
                 disabled={currentCameraIndex === 0}
                 onClick={() =>
@@ -363,9 +364,15 @@ export default function App() {
                 }
                 type="button"
               >
-                ← Back
+                <span aria-hidden="true" className="timeline-button__icon">
+                  ←
+                </span>
+                <span aria-hidden="true" className="timeline-button__label">
+                  Back
+                </span>
               </button>
               <button
+                aria-label="Next"
                 className="timeline-button"
                 disabled={currentCameraIndex === CAMERA_STATE_ORDER.length - 1}
                 onClick={() =>
@@ -375,19 +382,31 @@ export default function App() {
                 }
                 type="button"
               >
-                Next →
+                <span aria-hidden="true" className="timeline-button__label">
+                  Next
+                </span>
+                <span aria-hidden="true" className="timeline-button__icon">
+                  →
+                </span>
               </button>
             </div>
 
             <div className="timeline-controls timeline-controls--compact">
               <button
+                aria-label={isPlaying ? "Pause" : "Play"}
                 className="timeline-button"
                 onClick={() => setIsPlaying((previous) => !previous)}
                 type="button"
               >
-                {isPlaying ? "Pause" : "Play"}
+                <span aria-hidden="true" className="timeline-button__icon">
+                  {isPlaying ? "❚❚" : "▶"}
+                </span>
+                <span aria-hidden="true" className="timeline-button__label">
+                  {isPlaying ? "Pause" : "Play"}
+                </span>
               </button>
               <button
+                aria-label="Reset"
                 className="timeline-button timeline-button--secondary"
                 onClick={() => {
                   setDayOffset(0);
@@ -395,7 +414,12 @@ export default function App() {
                 }}
                 type="button"
               >
-                Reset
+                <span aria-hidden="true" className="timeline-button__icon">
+                  ↺
+                </span>
+                <span aria-hidden="true" className="timeline-button__label">
+                  Reset
+                </span>
               </button>
             </div>
           </div>

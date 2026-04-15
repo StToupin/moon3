@@ -36,6 +36,7 @@ interface BodiesProps {
   hideEarth?: boolean;
   showEarthTexture?: boolean;
   showSunTexture?: boolean;
+  showOrbits?: boolean;
 }
 
 const SCHEMATIC_SUN_SCALE = 35;
@@ -98,6 +99,7 @@ export function Bodies({
   hideEarth = false,
   showEarthTexture = false,
   showSunTexture = false,
+  showOrbits = true,
 }: BodiesProps) {
   const moonColorTexture = useLoader(TextureLoader, "/moon-texture.webp");
   const moonElevationTexture = useLoader(
@@ -278,7 +280,7 @@ export function Bodies({
               <EarthPlainMaterial />
             )}
           </mesh>
-          {earthOrbitPoints.length >= 2 && (
+          {showOrbits && earthOrbitPoints.length >= 2 && (
             <Line points={earthOrbitPoints} color="blue" lineWidth={2} />
           )}
         </>
@@ -299,7 +301,7 @@ export function Bodies({
         />
       </mesh>
 
-      {moonOrbitPoints.length >= 2 && (
+      {showOrbits && moonOrbitPoints.length >= 2 && (
         <Line points={moonOrbitPoints} color="white" lineWidth={2} />
       )}
     </>

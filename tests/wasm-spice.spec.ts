@@ -19,8 +19,8 @@ test("recreates the ephemeris app with kernel-backed CSPICE execution in the bro
     timeout: 120_000,
   });
   await expect(page).toHaveURL(/step=5\b/);
-  await expect(page.getByRole("button", { name: "← Back" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Next →" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Previous" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
   await expect(page.locator('link[rel="icon"][type="image/x-icon"]')).toHaveAttribute(
     "href",
     "/favicon.ico?v=3",
@@ -128,7 +128,7 @@ test("persists the step query param and only requests textures for the matching 
   expect(requestedAssets.has("/earth-texture.jpg")).toBe(false);
   expect(requestedAssets.has("/sun-texture.jpg")).toBe(false);
 
-  await page.getByRole("button", { name: "← Back" }).click();
+  await page.getByRole("button", { name: "Previous" }).click();
 
   await expect(page.getByTestId("camera-state")).toHaveText(
     "SCHEMATIC (NOT TO SCALE) (1/5)",

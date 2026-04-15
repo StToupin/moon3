@@ -24,11 +24,18 @@ function CameraController({
   viewName,
   onTargetUpdate,
 }: CameraControllerProps) {
-  const { camera } = useThree();
+  const { camera, size } = useThree();
   const lastViewRef = useRef(viewName);
   const zoomFactorRef = useRef(1);
   const lastTargetRef = useRef<Vector3 | null>(null);
   const lastBaseDistanceRef = useRef<number | null>(null);
+  const mobileFovMultiplier =
+    size.width <= 720
+      ? viewName === "schematic" || viewName === "solar_system"
+        ? 1.35
+        : 1.18
+      : 1;
+  const adjustedFov = targetState.fov * mobileFovMultiplier;
 
   useEffect(() => {
     const targetPosition = new Vector3(
@@ -70,11 +77,11 @@ function CameraController({
     camera.lookAt(lookAtTarget);
 
     if ("fov" in camera) {
-      Object.assign(camera as PerspectiveCamera, { fov: targetState.fov });
+      Object.assign(camera as PerspectiveCamera, { fov: adjustedFov });
     }
     camera.updateProjectionMatrix();
     onTargetUpdate(targetState.target);
-  }, [camera, onTargetUpdate, targetState, viewName]);
+  }, [adjustedFov, camera, onTargetUpdate, targetState, viewName]);
 
   return null;
 }
@@ -173,6 +180,7 @@ export function SolarSystemView({
   const showEarthTexture =
     currentStep === 1 || currentStep === 3 || currentStep === 4;
   const showSunTexture = currentStep === 1;
+  const showOrbits = currentStep <= 3;
 
   return (
     <div className="scene-shell">
@@ -206,6 +214,7 @@ export function SolarSystemView({
           hideEarth={currentState === "moon"}
           showEarthTexture={showEarthTexture}
           showSunTexture={showSunTexture}
+          showOrbits={showOrbits}
         />
         <mesh position={surfacePoint} scale={[20, 20, 20]}>
           <meshBasicMaterial color="red" />
