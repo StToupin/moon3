@@ -125,6 +125,7 @@ export function SolarSystemView({
   const [orbitTarget, setOrbitTarget] = useState<[number, number, number]>(
     cameras.moon.target,
   );
+  const currentStep = CAMERA_STATE_ORDER.indexOf(currentState) + 1;
 
   const cameraStates: Record<CameraStateName, CameraDisplayState> = {
     schematic: {
@@ -169,6 +170,9 @@ export function SolarSystemView({
   };
 
   const schematicMode = currentState === "schematic";
+  const showEarthTexture =
+    currentStep === 1 || currentStep === 3 || currentStep === 4;
+  const showSunTexture = currentStep === 1;
 
   return (
     <div className="scene-shell">
@@ -200,6 +204,8 @@ export function SolarSystemView({
           solarSystem={solarSystem}
           schematicMode={schematicMode}
           hideEarth={currentState === "moon"}
+          showEarthTexture={showEarthTexture}
+          showSunTexture={showSunTexture}
         />
         <mesh position={surfacePoint} scale={[20, 20, 20]}>
           <meshBasicMaterial color="red" />

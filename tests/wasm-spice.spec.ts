@@ -18,6 +18,7 @@ test("recreates the ephemeris app with kernel-backed CSPICE execution in the bro
   await expect(page.getByTestId("camera-state")).toHaveText("MOON (5/5)", {
     timeout: 120_000,
   });
+  await expect(page).toHaveURL(/step=5\b/);
   await expect(page.getByRole("button", { name: "← Back" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Next →" })).toBeDisabled();
   await expect(page.locator('link[rel="icon"][type="image/x-icon"]')).toHaveAttribute(
@@ -100,4 +101,39 @@ test("recreates the ephemeris app with kernel-backed CSPICE execution in the bro
     -135887920.1185606,
     3,
   );
+});
+
+test("persists the step query param and only requests textures for the matching steps", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({
+    latitude: 48.8566,
+    longitude: 2.3522,
+  });
+
+  const requestedAssets = new Set<string>();
+  page.on("request", (request) => {
+    requestedAssets.add(new URL(request.url()).pathname);
+  });
+
+  await page.goto(`/?date=${encodeURIComponent(FIXED_DATE)}&step=2`);
+
+  await expect(page.getByTestId("camera-state")).toHaveText("SOLAR SYSTEM (2/5)", {
+    timeout: 120_000,
+  });
+  await expect(page).toHaveURL(/step=2\b/);
+  await page.waitForTimeout(500);
+  expect(requestedAssets.has("/earth-texture.jpg")).toBe(false);
+  expect(requestedAssets.has("/sun-texture.jpg")).toBe(false);
+
+  await page.getByRole("button", { name: "← Back" }).click();
+
+  await expect(page.getByTestId("camera-state")).toHaveText(
+    "SCHEMATIC (NOT TO SCALE) (1/5)",
+  );
+  await expect(page).toHaveURL(/step=1\b/);
+  await expect.poll(() => requestedAssets.has("/earth-texture.jpg")).toBe(true);
+  await expect.poll(() => requestedAssets.has("/sun-texture.jpg")).toBe(true);
 });

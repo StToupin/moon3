@@ -22,6 +22,8 @@ const MIN_DAY_OFFSET = -365;
 const MAX_DAY_OFFSET = 365;
 const PLAYBACK_INTERVAL_MS = 100;
 const PLAYBACK_STEP_DAYS = 1;
+const DEFAULT_CAMERA_STATE: CameraStateName = "moon";
+const STEP_SEARCH_PARAM = "step";
 
 declare global {
   interface Window {
@@ -29,11 +31,29 @@ declare global {
   }
 }
 
+function getCameraStateFromStep(stepParam: string | null): CameraStateName | null {
+  if (stepParam === null) {
+    return null;
+  }
+
+  const parsedStep = Number(stepParam);
+  if (!Number.isInteger(parsedStep)) {
+    return null;
+  }
+
+  return CAMERA_STATE_ORDER[parsedStep - 1] ?? null;
+}
+
 export default function App() {
   const [dayOffset, setDayOffset] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentCameraState, setCurrentCameraState] =
-    useState<CameraStateName>("moon");
+    useState<CameraStateName>(() => {
+      const stepParam = new URLSearchParams(window.location.search).get(
+        STEP_SEARCH_PARAM,
+      );
+      return getCameraStateFromStep(stepParam) ?? DEFAULT_CAMERA_STATE;
+    });
   const geolocation = useGeolocation();
   const baseTimeMs = useMemo(() => {
     const dateParam = new URLSearchParams(window.location.search).get("date");
@@ -255,12 +275,29 @@ export default function App() {
 
   const currentCameraIndex = CAMERA_STATE_ORDER.indexOf(currentCameraState);
   const currentCameraLabel = formatCameraStateLabel(currentCameraState);
+  const currentStep = currentCameraIndex + 1;
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const nextStep = String(currentStep);
+
+    if (url.searchParams.get(STEP_SEARCH_PARAM) === nextStep) {
+      return;
+    }
+
+    url.searchParams.set(STEP_SEARCH_PARAM, nextStep);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+  }, [currentStep]);
 
   return (
     <main className="ephemeris-page">
       <div className="solar-system-container">
         <div className="camera-indicator" data-testid="camera-state">
-          {currentCameraLabel.toUpperCase()} ({currentCameraIndex + 1}/
+          {currentCameraLabel.toUpperCase()} ({currentStep}/
           {CAMERA_STATE_ORDER.length})
         </div>
 

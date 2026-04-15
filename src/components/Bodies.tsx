@@ -34,6 +34,8 @@ interface BodiesProps {
   solarSystem: SolarSystem;
   schematicMode?: boolean;
   hideEarth?: boolean;
+  showEarthTexture?: boolean;
+  showSunTexture?: boolean;
 }
 
 const SCHEMATIC_SUN_SCALE = 35;
@@ -54,12 +56,49 @@ function lerpArray(
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 }
 
+function SunTexturedMaterial() {
+  const sunColorTexture = useLoader(TextureLoader, "/sun-texture.jpg");
+
+  return (
+    <meshStandardMaterial
+      emissive="#ffffff"
+      emissiveIntensity={2}
+      emissiveMap={sunColorTexture}
+      map={sunColorTexture}
+      roughness={1}
+      toneMapped={false}
+    />
+  );
+}
+
+function SunPlainMaterial() {
+  return (
+    <meshStandardMaterial
+      color="#ffd43b"
+      emissive="#ffd43b"
+      emissiveIntensity={2}
+      wireframe
+    />
+  );
+}
+
+function EarthTexturedMaterial() {
+  const earthColorTexture = useLoader(TextureLoader, "/earth-texture.jpg");
+
+  return <meshStandardMaterial map={earthColorTexture} roughness={1} />;
+}
+
+function EarthPlainMaterial() {
+  return <meshStandardMaterial color="#4b7dff" roughness={1} />;
+}
+
 export function Bodies({
   solarSystem,
   schematicMode = false,
   hideEarth = false,
+  showEarthTexture = false,
+  showSunTexture = false,
 }: BodiesProps) {
-  const earthColorTexture = useLoader(TextureLoader, "/earth-texture.jpg");
   const moonColorTexture = useLoader(TextureLoader, "/moon-texture.webp");
   const moonElevationTexture = useLoader(
     TextureLoader,
@@ -221,12 +260,7 @@ export function Bodies({
         scale={states.normal.sunScale}
       >
         <sphereGeometry args={[1, 32, 16]} />
-        <meshStandardMaterial
-          color="#ffd43b"
-          emissive="#ffd43b"
-          emissiveIntensity={2}
-          wireframe
-        />
+        {showSunTexture ? <SunTexturedMaterial /> : <SunPlainMaterial />}
       </mesh>
 
       {!hideEarth && (
@@ -238,7 +272,11 @@ export function Bodies({
             scale={states.normal.earthScale}
           >
             <sphereGeometry args={[1, 64, 64]} />
-            <meshStandardMaterial map={earthColorTexture} />
+            {showEarthTexture ? (
+              <EarthTexturedMaterial />
+            ) : (
+              <EarthPlainMaterial />
+            )}
           </mesh>
           {earthOrbitPoints.length >= 2 && (
             <Line points={earthOrbitPoints} color="blue" lineWidth={2} />
