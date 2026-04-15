@@ -40,14 +40,6 @@ const KERNELS = [
     publicPath: withBase("spice/kernels/pck/pck00010.tpc"),
     mountedPath: "/kernels/pck00010.tpc",
   },
-  {
-    publicPath: withBase("spice/kernels/pck/earth_200101_990825_predict.bpc"),
-    mountedPath: "/kernels/earth_200101_990825_predict.bpc",
-  },
-  {
-    publicPath: withBase("spice/kernels/fk/earth_assoc_itrf93.tf"),
-    mountedPath: "/kernels/earth_assoc_itrf93.tf",
-  },
 ] as const;
 
 interface SpiceRuntime {

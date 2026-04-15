@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_DIR = resolve(__dirname, "..");
+const SOURCE_SPICE_DIR = resolve(APP_DIR, "spice");
 
 const UPSTREAM_REPO = "arturania/cspice";
 const UPSTREAM_COMMIT = "53bce326267dd2d6d567de92b15869c9ed7d0629";
@@ -22,6 +23,7 @@ const UPSTREAM_ARCHIVE_URL = `https://codeload.github.com/${UPSTREAM_REPO}/tar.g
 const BUILD_SIGNATURE = "full-app-v1";
 
 const CACHE_DIR = resolve(APP_DIR, ".cache/wasm-spice", UPSTREAM_COMMIT);
+const KERNEL_CACHE_DIR = resolve(APP_DIR, ".cache/naif-kernels");
 const GENERATED_DIR = resolve(APP_DIR, "src/spice/generated");
 const PUBLIC_SPICE_DIR = resolve(APP_DIR, "public/spice");
 const GENERATED_JS_PATH = join(GENERATED_DIR, "cspice.js");
@@ -32,28 +34,43 @@ const CACHED_ARCHIVE_PATH = join(CACHE_DIR, "cspice.tar.gz");
 const CACHED_JS_PATH = join(CACHE_DIR, "cspice.js");
 const CACHED_WASM_PATH = join(CACHE_DIR, "cspice.wasm");
 const CACHED_BUILD_INFO_PATH = join(CACHE_DIR, "build-info.json");
+const SPK_REDUCER_DIR = resolve(APP_DIR, ".cache/spk-reducer");
+const SPK_REDUCER_VENV_DIR = join(SPK_REDUCER_DIR, "venv");
+const SPK_REDUCER_PYTHON_PATH = join(SPK_REDUCER_VENV_DIR, "bin/python");
+const SPK_REDUCER_STAMP_PATH = join(SPK_REDUCER_DIR, "requirements.txt");
+const SPK_REDUCER_REQUIREMENTS = ["numpy==2.4.4", "spiceypy==8.1.0"];
 
 const KERNEL_MAPPINGS = [
   {
-    source: resolve(APP_DIR, "spice/naif0012.tls"),
+    kind: "download",
+    source: resolve(SOURCE_SPICE_DIR, "naif0012.tls"),
+    cachePath: resolve(KERNEL_CACHE_DIR, "naif0012.tls"),
     destination: resolve(PUBLIC_SPICE_DIR, "kernels/lsk/naif0012.tls"),
+    downloadUrl:
+      "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls",
   },
   {
-    source: resolve(APP_DIR, "spice/de432s.bsp"),
+    kind: "generated-spk",
+    source: resolve(SOURCE_SPICE_DIR, "de432s.bsp"),
+    cachePath: resolve(KERNEL_CACHE_DIR, "de432s-moon3.bsp"),
+    sourceKernelCachePath: resolve(KERNEL_CACHE_DIR, "de432s-full.bsp"),
     destination: resolve(PUBLIC_SPICE_DIR, "kernels/spk/de432s.bsp"),
+    downloadUrl:
+      "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de432s.bsp",
   },
   {
-    source: resolve(APP_DIR, "spice/pck00010.tpc"),
+    kind: "download",
+    source: resolve(SOURCE_SPICE_DIR, "pck00010.tpc"),
+    cachePath: resolve(KERNEL_CACHE_DIR, "pck00010.tpc"),
     destination: resolve(PUBLIC_SPICE_DIR, "kernels/pck/pck00010.tpc"),
+    downloadUrl:
+      "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00010.tpc",
   },
-  {
-    source: resolve(APP_DIR, "spice/earth_200101_990825_predict.bpc"),
-    destination: resolve(PUBLIC_SPICE_DIR, "kernels/pck/earth_200101_990825_predict.bpc"),
-  },
-  {
-    source: resolve(APP_DIR, "spice/earth_assoc_itrf93.tf"),
-    destination: resolve(PUBLIC_SPICE_DIR, "kernels/fk/earth_assoc_itrf93.tf"),
-  },
+];
+
+const REMOVED_KERNEL_PATHS = [
+  resolve(PUBLIC_SPICE_DIR, "kernels/pck/earth_200101_990825_predict.bpc"),
+  resolve(PUBLIC_SPICE_DIR, "kernels/fk/earth_assoc_itrf93.tf"),
 ];
 
 const CSPICE_TYPES = `declare const createCSpice: (options?: {
@@ -144,12 +161,126 @@ function buildInfoContents() {
   );
 }
 
-function syncKernels() {
-  for (const kernel of KERNEL_MAPPINGS) {
-    if (!fileExists(kernel.source)) {
-      throw new Error(`Missing kernel source file: ${kernel.source}`);
+async function downloadFile(url, targetPath) {
+  ensureDir(dirname(targetPath));
+  log(`Downloading ${url}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to download ${url}: ${response.status} ${response.statusText}`,
+      );
     }
 
+    writeFileSync(targetPath, Buffer.from(await response.arrayBuffer()));
+    return;
+  } catch (error) {
+    if (!hasCommand("curl")) {
+      throw error;
+    }
+  }
+
+  execFileSync("curl", ["-fsSL", url, "-o", targetPath], {
+    cwd: APP_DIR,
+    stdio: "inherit",
+  });
+}
+
+function ensureReducerDependenciesInstalled() {
+  const expectedRequirements = `${SPK_REDUCER_REQUIREMENTS.join("\n")}\n`;
+  if (
+    fileExists(SPK_REDUCER_PYTHON_PATH) &&
+    fileExists(SPK_REDUCER_STAMP_PATH) &&
+    readFileSync(SPK_REDUCER_STAMP_PATH, "utf8") === expectedRequirements
+  ) {
+    return;
+  }
+
+  log("Preparing Python environment for reduced SPK generation");
+  ensureDir(SPK_REDUCER_DIR);
+  rmSync(SPK_REDUCER_VENV_DIR, { recursive: true, force: true });
+  execFileSync("python3", ["-m", "venv", SPK_REDUCER_VENV_DIR], {
+    cwd: APP_DIR,
+    stdio: "inherit",
+  });
+  execFileSync(
+    SPK_REDUCER_PYTHON_PATH,
+    ["-m", "pip", "install", ...SPK_REDUCER_REQUIREMENTS],
+    {
+      cwd: APP_DIR,
+      stdio: "inherit",
+    },
+  );
+  writeFileSync(SPK_REDUCER_STAMP_PATH, expectedRequirements);
+}
+
+async function ensureDownloadedKernel(kernel) {
+  if (fileExists(kernel.source)) {
+    if (!fileExists(kernel.cachePath)) {
+      ensureDir(dirname(kernel.cachePath));
+      copyFileSync(kernel.source, kernel.cachePath);
+    }
+    return;
+  }
+
+  if (!fileExists(kernel.cachePath)) {
+    await downloadFile(kernel.downloadUrl, kernel.cachePath);
+  }
+
+  ensureDir(dirname(kernel.source));
+  copyFileSync(kernel.cachePath, kernel.source);
+}
+
+async function ensureReducedSpk(kernel) {
+  if (fileExists(kernel.source)) {
+    if (!fileExists(kernel.cachePath)) {
+      ensureDir(dirname(kernel.cachePath));
+      copyFileSync(kernel.source, kernel.cachePath);
+    }
+    return;
+  }
+
+  if (!fileExists(kernel.cachePath)) {
+    if (!fileExists(kernel.sourceKernelCachePath)) {
+      await downloadFile(kernel.downloadUrl, kernel.sourceKernelCachePath);
+    }
+
+    ensureReducerDependenciesInstalled();
+    log("Building reduced de432s.bsp");
+    execFileSync(
+      SPK_REDUCER_PYTHON_PATH,
+      [
+        resolve(APP_DIR, "scripts/reduce-spk.py"),
+        kernel.sourceKernelCachePath,
+        kernel.cachePath,
+      ],
+      {
+        cwd: APP_DIR,
+        stdio: "inherit",
+      },
+    );
+  }
+
+  ensureDir(dirname(kernel.source));
+  copyFileSync(kernel.cachePath, kernel.source);
+}
+
+async function ensureKernelSource(kernel) {
+  if (kernel.kind === "generated-spk") {
+    await ensureReducedSpk(kernel);
+    return;
+  }
+
+  await ensureDownloadedKernel(kernel);
+}
+
+async function syncKernels() {
+  for (const removedKernelPath of REMOVED_KERNEL_PATHS) {
+    rmSync(removedKernelPath, { force: true });
+  }
+
+  for (const kernel of KERNEL_MAPPINGS) {
+    await ensureKernelSource(kernel);
     ensureDir(dirname(kernel.destination));
     copyFileSync(kernel.source, kernel.destination);
   }
@@ -281,6 +412,8 @@ async function rebuildArtifacts() {
 
 async function main() {
   ensureDir(CACHE_DIR);
+  ensureDir(SOURCE_SPICE_DIR);
+  ensureDir(KERNEL_CACHE_DIR);
   ensureDir(GENERATED_DIR);
   ensureDir(PUBLIC_SPICE_DIR);
 
@@ -299,7 +432,7 @@ async function main() {
     log("CSPICE JS/WASM artifacts are up to date");
   }
 
-  syncKernels();
+  await syncKernels();
   writeFileSync(GENERATED_TYPES_PATH, CSPICE_TYPES);
   log("WASM SPICE assets are ready");
 }

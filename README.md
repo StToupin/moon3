@@ -17,6 +17,10 @@ It renders an interactive 3D view of the Sun, Earth, and Moon, including:
 - time scrubbing and playback for exploring motion over time
 
 No backend is required once the app is built. Ephemeris calculations happen client-side.
+To keep the browser payload smaller, Earth rotation uses the generic `IAU_EARTH`
+frame from the text PCK instead of a high-precision binary Earth orientation kernel.
+The bundled `spice/de432s.bsp` is also a reduced DE432s subset that keeps only
+the Sun, Earth barycenter, Earth, and Moon segments used by the app.
 
 ## Demo
 
@@ -37,11 +41,14 @@ No backend is required once the app is built. Ephemeris calculations happen clie
 You will need:
 
 - Node.js 22+
+- Python 3 (only needed when the ignored local kernel cache must be rebuilt)
 - `emcc`
 - `tcsh`
 - `tar`
 
 The first build prepares the browser-ready CSPICE bundle from a pinned upstream source archive. Build artifacts are cached under `.cache`, so repeated runs are much faster.
+If the local SPICE kernel sources are missing, the prepare step also downloads the
+generic kernels and rebuilds the reduced `de432s.bsp` subset automatically.
 
 ### Install
 
@@ -91,6 +98,15 @@ This regenerates the runtime assets under:
 
 - `src/spice/generated`
 - `public/spice`
+
+If you want to regenerate the reduced planetary kernel from an official
+`de432s.bsp` download:
+
+```bash
+python3 scripts/reduce-spk.py /path/to/de432s.bsp spice/de432s.bsp
+```
+
+This helper script requires `spiceypy` and `numpy`.
 
 ## Testing
 

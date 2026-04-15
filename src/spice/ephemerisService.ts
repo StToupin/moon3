@@ -20,7 +20,7 @@ const SUN_ID = 10;
 const EARTH_ID = 399;
 const MOON_ID = 301;
 const SUN_FRAME = "IAU_SUN";
-const EARTH_FRAME = "ITRF93";
+const EARTH_FRAME = "IAU_EARTH";
 const MOON_FRAME = "IAU_MOON";
 const AU_KM = 149597870.7;
 const MOON_ORBITAL_PERIOD_SECONDS = 27.32 * 24 * 60 * 60;
@@ -197,7 +197,7 @@ function computeCameras(
   );
   const earthToEclipticRotation = pxform(
     runtime,
-    "ITRF93",
+    EARTH_FRAME,
     REFERENCE_FRAME,
     et,
   );

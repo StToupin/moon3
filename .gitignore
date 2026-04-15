@@ -5,3 +5,8 @@ playwright-report/
 test-results/
 public/spice/
 src/spice/generated/
+spice/*.bsp
+spice/*.tls
+spice/*.tpc
+spice/*.bpc
+spice/*.tf

@@ -71,8 +71,6 @@ test("recreates the ephemeris app with kernel-backed CSPICE execution in the bro
     "/kernels/naif0012.tls",
     "/kernels/de432s.bsp",
     "/kernels/pck00010.tpc",
-    "/kernels/earth_200101_990825_predict.bpc",
-    "/kernels/earth_assoc_itrf93.tf",
   ]);
   expect(snapshot.orbits.earthPoints).toBe(360);
   expect(snapshot.orbits.moonPoints).toBe(360);
@@ -93,14 +91,21 @@ test("recreates the ephemeris app with kernel-backed CSPICE execution in the bro
   expect(earth?.radiiKm[0]).toBeCloseTo(6378.1366, 3);
   expect(earth?.positionKm[0]).toBeCloseTo(-135883584.82967234, 3);
   expect(moon?.positionKm[0]).toBeCloseTo(-135513221.72906354, 3);
-  expect(snapshot.ephemeris.surfacePoint[0]).toBeCloseTo(
-    -135886244.10997662,
-    3,
+
+  const earthCenterDistance = Math.hypot(
+    snapshot.ephemeris.surfacePoint[0] - (earth?.positionKm[0] ?? 0),
+    snapshot.ephemeris.surfacePoint[1] - (earth?.positionKm[1] ?? 0),
+    snapshot.ephemeris.surfacePoint[2] - (earth?.positionKm[2] ?? 0),
   );
-  expect(snapshot.ephemeris.moonCamera.position[0]).toBeCloseTo(
-    -135887920.1185606,
-    3,
+  expect(earthCenterDistance).toBeGreaterThan(earth?.radiiKm[2] ?? 0);
+  expect(earthCenterDistance).toBeLessThanOrEqual(earth?.radiiKm[0] ?? 0);
+
+  const cameraAltitude = Math.hypot(
+    snapshot.ephemeris.moonCamera.position[0] - (earth?.positionKm[0] ?? 0),
+    snapshot.ephemeris.moonCamera.position[1] - (earth?.positionKm[1] ?? 0),
+    snapshot.ephemeris.moonCamera.position[2] - (earth?.positionKm[2] ?? 0),
   );
+  expect(cameraAltitude).toBeCloseTo((earth?.radiiKm[0] ?? 0) + 4000, 0);
 });
 
 test("persists the step query param and only requests textures for the matching steps", async ({
