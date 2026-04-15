@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { OrbitControls } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
-import { PerspectiveCamera, Vector3 } from "three";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { PerspectiveCamera, Quaternion, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Bodies } from "./Bodies";
 import type { Cameras, SolarSystem } from "./types";
@@ -20,16 +20,108 @@ interface CameraControllerProps {
   controlsRef: RefObject<OrbitControlsImpl | null>;
 }
 
+interface CameraSnapshot {
+  position: Vector3;
+  target: Vector3;
+  up: Vector3;
+  quaternion: Quaternion;
+  fov: number;
+}
+
+interface CameraTransition {
+  start: CameraSnapshot;
+  end: CameraSnapshot;
+  elapsed: number;
+}
+
+const CAMERA_TRANSITION_DURATION = 0.8;
+
+function interpolate(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function easeInOutCubic(t: number): number {
+  if (t < 0.5) {
+    return 4 * t * t * t;
+  }
+
+  return 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function normalizeUpVector(up: Vector3): Vector3 {
+  if (up.lengthSq() === 0) {
+    return new Vector3(0, 1, 0);
+  }
+
+  return up.normalize();
+}
+
+function buildCameraSnapshot(
+  position: Vector3,
+  target: Vector3,
+  up: Vector3,
+  fov: number,
+): CameraSnapshot {
+  const snapshotCamera = new PerspectiveCamera();
+  const normalizedUp = normalizeUpVector(up.clone());
+
+  snapshotCamera.position.copy(position);
+  snapshotCamera.up.copy(normalizedUp);
+  snapshotCamera.lookAt(target);
+
+  return {
+    position: position.clone(),
+    target: target.clone(),
+    up: normalizedUp,
+    quaternion: snapshotCamera.quaternion.clone(),
+    fov,
+  };
+}
+
+function captureCameraSnapshot(
+  camera: PerspectiveCamera,
+  target: Vector3,
+): CameraSnapshot {
+  return {
+    position: camera.position.clone(),
+    target: target.clone(),
+    up: normalizeUpVector(camera.up.clone()),
+    quaternion: camera.quaternion.clone(),
+    fov: camera.fov,
+  };
+}
+
+function applyCameraSnapshot(
+  camera: PerspectiveCamera,
+  controls: OrbitControlsImpl | null,
+  snapshot: CameraSnapshot,
+  syncControls = true,
+) {
+  camera.position.copy(snapshot.position);
+  camera.up.copy(snapshot.up);
+  camera.quaternion.copy(snapshot.quaternion);
+  camera.fov = snapshot.fov;
+  camera.updateProjectionMatrix();
+
+  if (syncControls && controls) {
+    controls.target.copy(snapshot.target);
+    controls.update();
+  }
+}
+
 function CameraController({
   targetState,
   viewName,
   controlsRef,
 }: CameraControllerProps) {
-  const { camera, size } = useThree();
+  const { camera: threeCamera, size } = useThree();
+  const camera = threeCamera as PerspectiveCamera;
   const lastViewRef = useRef(viewName);
   const zoomFactorRef = useRef(1);
   const lastTargetRef = useRef<Vector3 | null>(null);
   const lastBaseDistanceRef = useRef<number | null>(null);
+  const transitionRef = useRef<CameraTransition | null>(null);
+  const hasInitializedRef = useRef(false);
   const mobileFovMultiplier =
     size.width <= 720
       ? viewName === "schematic" || viewName === "solar_system"
@@ -37,6 +129,51 @@ function CameraController({
         : 1.18
       : 1;
   const adjustedFov = targetState.fov * mobileFovMultiplier;
+
+  useFrame((_, delta) => {
+    const transition = transitionRef.current;
+    if (!transition) {
+      return;
+    }
+
+    transition.elapsed = Math.min(
+      transition.elapsed + delta,
+      CAMERA_TRANSITION_DURATION,
+    );
+    const progress = easeInOutCubic(
+      transition.elapsed / CAMERA_TRANSITION_DURATION,
+    );
+
+    const position = transition.start.position
+      .clone()
+      .lerp(transition.end.position, progress);
+    const target = transition.start.target
+      .clone()
+      .lerp(transition.end.target, progress);
+    const up = normalizeUpVector(
+      transition.start.up.clone().lerp(transition.end.up, progress),
+    );
+    const quaternion = transition.start.quaternion
+      .clone()
+      .slerp(transition.end.quaternion, progress);
+    const fov = interpolate(transition.start.fov, transition.end.fov, progress);
+
+    applyCameraSnapshot(camera, controlsRef.current, {
+      position,
+      target,
+      up,
+      quaternion,
+      fov,
+    }, false);
+
+    if (progress >= 1) {
+      transitionRef.current = null;
+      applyCameraSnapshot(camera, controlsRef.current, transition.end);
+      if (controlsRef.current) {
+        controlsRef.current.enabled = true;
+      }
+    }
+  });
 
   useLayoutEffect(() => {
     const targetPosition = new Vector3(
@@ -50,10 +187,10 @@ function CameraController({
       targetState.target[2],
     );
     const baseDistance = targetPosition.distanceTo(lookAtTarget);
+    const viewChanged = viewName !== lastViewRef.current;
 
-    if (viewName !== lastViewRef.current) {
+    if (viewChanged) {
       zoomFactorRef.current = 1;
-      lastViewRef.current = viewName;
     } else if (
       lastTargetRef.current !== null &&
       lastBaseDistanceRef.current !== null
@@ -67,25 +204,55 @@ function CameraController({
     lastTargetRef.current = lookAtTarget.clone();
     lastBaseDistanceRef.current = baseDistance;
 
-    const direction = targetPosition.clone().sub(lookAtTarget).normalize();
+    const direction = targetPosition.clone().sub(lookAtTarget);
+    if (direction.lengthSq() === 0) {
+      direction.set(0, 0, 1);
+    } else {
+      direction.normalize();
+    }
     const zoomedDistance = baseDistance * zoomFactorRef.current;
     const zoomedPosition = lookAtTarget
       .clone()
       .add(direction.multiplyScalar(zoomedDistance));
 
-    camera.position.copy(zoomedPosition);
-    camera.up.set(targetState.up[0], targetState.up[1], targetState.up[2]);
-    camera.lookAt(lookAtTarget);
+    const nextSnapshot = buildCameraSnapshot(
+      zoomedPosition,
+      lookAtTarget,
+      new Vector3(targetState.up[0], targetState.up[1], targetState.up[2]),
+      adjustedFov,
+    );
 
+    if (!hasInitializedRef.current) {
+      applyCameraSnapshot(camera, controlsRef.current, nextSnapshot);
+      hasInitializedRef.current = true;
+      transitionRef.current = null;
+      lastViewRef.current = viewName;
+      return;
+    }
+
+    if (viewChanged) {
+      transitionRef.current = {
+        start: captureCameraSnapshot(
+          camera,
+          controlsRef.current?.target.clone() ?? lookAtTarget.clone(),
+        ),
+        end: nextSnapshot,
+        elapsed: 0,
+      };
+
+      if (controlsRef.current) {
+        controlsRef.current.enabled = false;
+      }
+      lastViewRef.current = viewName;
+      return;
+    }
+
+    transitionRef.current = null;
+    applyCameraSnapshot(camera, controlsRef.current, nextSnapshot);
     if (controlsRef.current) {
-      controlsRef.current.target.copy(lookAtTarget);
-      controlsRef.current.update();
+      controlsRef.current.enabled = true;
     }
-
-    if ("fov" in camera) {
-      Object.assign(camera as PerspectiveCamera, { fov: adjustedFov });
-    }
-    camera.updateProjectionMatrix();
+    lastViewRef.current = viewName;
   }, [adjustedFov, camera, controlsRef, targetState, viewName]);
 
   return null;
