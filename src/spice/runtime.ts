@@ -1,3 +1,5 @@
+import { withBase } from "../basePath";
+
 type SpiceReturnType = "number" | "string" | null;
 type SpiceArgType = "number" | "string";
 
@@ -27,23 +29,23 @@ type SpiceFactory = (options?: {
 
 const KERNELS = [
   {
-    publicPath: "/spice/kernels/lsk/naif0012.tls",
+    publicPath: withBase("spice/kernels/lsk/naif0012.tls"),
     mountedPath: "/kernels/naif0012.tls",
   },
   {
-    publicPath: "/spice/kernels/spk/de432s.bsp",
+    publicPath: withBase("spice/kernels/spk/de432s.bsp"),
     mountedPath: "/kernels/de432s.bsp",
   },
   {
-    publicPath: "/spice/kernels/pck/pck00010.tpc",
+    publicPath: withBase("spice/kernels/pck/pck00010.tpc"),
     mountedPath: "/kernels/pck00010.tpc",
   },
   {
-    publicPath: "/spice/kernels/pck/earth_200101_990825_predict.bpc",
+    publicPath: withBase("spice/kernels/pck/earth_200101_990825_predict.bpc"),
     mountedPath: "/kernels/earth_200101_990825_predict.bpc",
   },
   {
-    publicPath: "/spice/kernels/fk/earth_assoc_itrf93.tf",
+    publicPath: withBase("spice/kernels/fk/earth_assoc_itrf93.tf"),
     mountedPath: "/kernels/earth_assoc_itrf93.tf",
   },
 ] as const;
@@ -111,7 +113,7 @@ async function getSpiceModule(): Promise<SpiceModule> {
       .then(async (module) => {
         const createSpice = module.default as SpiceFactory;
         const instance = await createSpice({
-          locateFile: (path) => `/spice/${path}`,
+          locateFile: (path) => withBase(`spice/${path}`),
         });
 
         instance.ccall("erract_c", null, ["string", "number", "string"], [

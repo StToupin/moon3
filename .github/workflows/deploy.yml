@@ -1,0 +1,74 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    env:
+      VITE_BASE_PATH: ${{ vars.PAGES_BASE_PATH != '' && vars.PAGES_BASE_PATH || format('/{0}/', github.event.repository.name) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Restore WASM SPICE cache
+        id: wasm-cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/wasm-spice
+          key: ${{ runner.os }}-wasm-spice-${{ hashFiles('scripts/prepare-wasm-spice.mjs', 'spice/**') }}
+
+      - name: Install tcsh
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y tcsh
+
+      - name: Install Emscripten SDK
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          cd "$RUNNER_TEMP/emsdk"
+          ./emsdk install latest
+          ./emsdk activate latest
+          echo "$RUNNER_TEMP/emsdk" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
+          echo "EMSDK=$RUNNER_TEMP/emsdk" >> "$GITHUB_ENV"
+          echo "EM_CONFIG=$RUNNER_TEMP/emsdk/.emscripten" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

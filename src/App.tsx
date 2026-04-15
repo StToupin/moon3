@@ -126,19 +126,16 @@ export default function App() {
   const {
     data,
     error: ephemerisError,
-    isFetching: isFetchingEphemeris,
     isLoading: isLoadingEphemeris,
   } = useEphemeris(ephemerisRequest);
   const {
     data: orbitsData,
     error: orbitsError,
-    isFetching: isFetchingOrbits,
     isLoading: isLoadingOrbits,
   } = useOrbits(orbitsRequest);
   const { data: diagnostics } = useSpiceDiagnostics();
 
   const combinedError = ephemerisError ?? orbitsError;
-  const isSyncPending = deferredIsoDate !== isoDate;
 
   const orbits = useMemo<OrbitsData | null>(() => {
     if (!orbitsData) {
@@ -342,11 +339,6 @@ export default function App() {
                   {dayOffset > 0 ? "+" : ""}
                   {dayOffset} days
                 </span>
-              )}
-            </div>
-            <div className="timeline-status">
-              {(isSyncPending || isFetchingEphemeris || isFetchingOrbits) && (
-                <span className="timeline-sync">Syncing WASM state</span>
               )}
             </div>
           </div>

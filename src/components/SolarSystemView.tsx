@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { PerspectiveCamera, Vector3 } from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { Bodies } from "./Bodies";
 import type { Cameras, SolarSystem } from "./types";
 
@@ -16,13 +17,13 @@ interface CameraDisplayState {
 interface CameraControllerProps {
   targetState: CameraDisplayState;
   viewName: string;
-  onTargetUpdate: (target: [number, number, number]) => void;
+  controlsRef: RefObject<OrbitControlsImpl | null>;
 }
 
 function CameraController({
   targetState,
   viewName,
-  onTargetUpdate,
+  controlsRef,
 }: CameraControllerProps) {
   const { camera, size } = useThree();
   const lastViewRef = useRef(viewName);
@@ -37,7 +38,7 @@ function CameraController({
       : 1;
   const adjustedFov = targetState.fov * mobileFovMultiplier;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const targetPosition = new Vector3(
       targetState.position[0],
       targetState.position[1],
@@ -76,12 +77,16 @@ function CameraController({
     camera.up.set(targetState.up[0], targetState.up[1], targetState.up[2]);
     camera.lookAt(lookAtTarget);
 
+    if (controlsRef.current) {
+      controlsRef.current.target.copy(lookAtTarget);
+      controlsRef.current.update();
+    }
+
     if ("fov" in camera) {
       Object.assign(camera as PerspectiveCamera, { fov: adjustedFov });
     }
     camera.updateProjectionMatrix();
-    onTargetUpdate(targetState.target);
-  }, [adjustedFov, camera, onTargetUpdate, targetState, viewName]);
+  }, [adjustedFov, camera, controlsRef, targetState, viewName]);
 
   return null;
 }
@@ -129,9 +134,7 @@ export function SolarSystemView({
   surfacePoint,
   currentState,
 }: SolarSystemViewProps) {
-  const [orbitTarget, setOrbitTarget] = useState<[number, number, number]>(
-    cameras.moon.target,
-  );
+  const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
   const currentStep = CAMERA_STATE_ORDER.indexOf(currentState) + 1;
 
   const cameraStates: Record<CameraStateName, CameraDisplayState> = {
@@ -196,11 +199,14 @@ export function SolarSystemView({
         style={{ width: "100%", height: "100%", background: "black" }}
       >
         <CameraController
+          controlsRef={orbitControlsRef}
           targetState={cameraStates[currentState]}
           viewName={currentState}
-          onTargetUpdate={setOrbitTarget}
         />
-        <OrbitControls target={orbitTarget} />
+        <OrbitControls
+          ref={orbitControlsRef}
+          target={cameraStates[currentState].target}
+        />
         <ambientLight intensity={0.1} />
         <pointLight
           position={solarSystem.SUN.position}

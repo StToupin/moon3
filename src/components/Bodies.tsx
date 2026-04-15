@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Line } from "@react-three/drei";
 import { useFrame, useLoader } from "@react-three/fiber";
 import { Matrix4, Quaternion, TextureLoader, Vector3 } from "three";
 import * as THREE from "three";
 import type { SolarSystem } from "./types";
+import { withBase } from "../basePath";
 
 function quaternionFromMatrix(directionMatrix: number[][]): Quaternion {
   const matrix4 = new Matrix4().set(
@@ -44,6 +45,10 @@ const SCHEMATIC_EARTH_SCALE = 1300;
 const SCHEMATIC_MOON_SCALE = 1700;
 const SCHEMATIC_MOON_ORBIT_SCALE = 50;
 const SCHEMATIC_TRANSITION_DURATION = 0.3;
+const SUN_TEXTURE_URL = withBase("sun-texture.jpg");
+const EARTH_TEXTURE_URL = withBase("earth-texture.jpg");
+const MOON_TEXTURE_URL = withBase("moon-texture.webp");
+const MOON_ELEVATION_URL = withBase("moon-elevation.webp");
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -58,7 +63,7 @@ function lerpArray(
 }
 
 function SunTexturedMaterial() {
-  const sunColorTexture = useLoader(TextureLoader, "/sun-texture.jpg");
+  const sunColorTexture = useLoader(TextureLoader, SUN_TEXTURE_URL);
 
   return (
     <meshStandardMaterial
@@ -84,7 +89,7 @@ function SunPlainMaterial() {
 }
 
 function EarthTexturedMaterial() {
-  const earthColorTexture = useLoader(TextureLoader, "/earth-texture.jpg");
+  const earthColorTexture = useLoader(TextureLoader, EARTH_TEXTURE_URL);
 
   return <meshStandardMaterial map={earthColorTexture} roughness={1} />;
 }
@@ -101,11 +106,8 @@ export function Bodies({
   showSunTexture = false,
   showOrbits = true,
 }: BodiesProps) {
-  const moonColorTexture = useLoader(TextureLoader, "/moon-texture.webp");
-  const moonElevationTexture = useLoader(
-    TextureLoader,
-    "/moon-elevation.webp",
-  );
+  const moonColorTexture = useLoader(TextureLoader, MOON_TEXTURE_URL);
+  const moonElevationTexture = useLoader(TextureLoader, MOON_ELEVATION_URL);
 
   const animationProgress = useRef(schematicMode ? 1 : 0);
   const targetProgress = schematicMode ? 1 : 0;
@@ -122,8 +124,18 @@ export function Bodies({
       .clone()
       .add(earthToMoon.multiplyScalar(SCHEMATIC_MOON_ORBIT_SCALE));
 
-    const normalMoonOrbit = (solarSystem.MOON.orbit ?? []).map(
+    const rawMoonOrbit = (solarSystem.MOON.orbit ?? []).map(
       (point) => new Vector3(point[0], point[1], point[2]),
+    );
+    // The orbit data is generated so the first point corresponds to "now".
+    // Re-align it to the live moon position to avoid visible jumps when the
+    // orbit query briefly lags behind the ephemeris query during playback.
+    const moonOrbitAlignment =
+      rawMoonOrbit.length > 0
+        ? realMoonPosition.clone().sub(rawMoonOrbit[0])
+        : new Vector3();
+    const normalMoonOrbit = rawMoonOrbit.map((point) =>
+      point.clone().add(moonOrbitAlignment),
     );
     const orbitCenter =
       normalMoonOrbit.length > 0
@@ -236,7 +248,7 @@ export function Bodies({
     [solarSystem],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const transition = animationProgress.current;
     const { normal, schematic } = states;
 

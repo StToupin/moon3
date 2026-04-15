@@ -219,16 +219,6 @@ button {
   margin-bottom: 0;
 }
 
-.timeline-status {
-  align-self: flex-start;
-}
-
-.timeline-sync {
-  color: var(--accent-sky);
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.78rem;
-}
-
 .timeline-slider {
   accent-color: var(--accent-sky);
   cursor: pointer;

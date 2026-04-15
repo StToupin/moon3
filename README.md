@@ -78,3 +78,19 @@ npm run dev -- --host 127.0.0.1 --port 4174
 Then open:
 
 - App: [http://127.0.0.1:4174/?date=2026-04-15T18:54:41.304Z](http://127.0.0.1:4174/?date=2026-04-15T18:54:41.304Z)
+
+## GitHub Pages
+
+This repo now includes a GitHub Pages workflow at `.github/workflows/deploy.yml`.
+
+To enable automatic deploys:
+
+1. Push the repo to GitHub.
+2. In GitHub, open **Settings → Pages**.
+3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+4. Push to `main` to trigger a deploy.
+
+The workflow builds with `npm run build` and publishes `dist` to Pages.
+For this repository, the default deploy base path is `/${repo-name}/`, which matches project Pages URLs like `https://<user>.github.io/moon3/`.
+
+If you later switch to a custom domain or a user site (`https://<user>.github.io/`), set a repository variable named `PAGES_BASE_PATH` to `/` so the app builds with root-relative asset URLs.
