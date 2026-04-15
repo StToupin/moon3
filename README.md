@@ -1,44 +1,75 @@
-# WASM SPICE
+# Moon3
 
-This is a standalone Vite + React app that recreates the main ephemeris experience with CSPICE running fully in WebAssembly in the browser. It loads the same core kernels, computes ephemeris/orbit/camera data locally, and renders the React + Three.js scene without the Go backend or process pool.
+Interactive Sun-Earth-Moon visualization powered by NASA SPICE, running fully in the browser with WebAssembly.
 
-## Prerequisites
+[Live demo on GitHub Pages](https://sttoupin.github.io/moon3/)
+
+## What This App Does
+
+Moon3 is a standalone Vite + React app that computes solar system data locally in the browser using CSPICE compiled to WebAssembly.
+
+It renders an interactive 3D view of the Sun, Earth, and Moon, including:
+
+- body positions and orientations computed from SPICE kernels
+- Earth and Moon orbit paths
+- multiple camera viewpoints
+- a surface-point-aware Moon view based on the user's geolocation
+- time scrubbing and playback for exploring motion over time
+
+No backend is required once the app is built. Ephemeris calculations happen client-side.
+
+## Demo
+
+- GitHub Pages: [https://sttoupin.github.io/moon3/](https://sttoupin.github.io/moon3/)
+
+## Tech Stack
+
+- React 19
+- Vite
+- TypeScript
+- Three.js with React Three Fiber
+- NASA SPICE / CSPICE compiled to WebAssembly
+
+## Local Development
+
+### Prerequisites
+
+You will need:
 
 - Node.js 22+
 - `emcc`
 - `tcsh`
 - `tar`
 
-The build downloads pinned upstream sources from [`arturania/cspice`](https://github.com/arturania/cspice) and rebuilds the browser CSPICE bundle locally.
-That download/build is cached under `.cache`, so repeated `npm run dev` runs reuse the local cache instead of redownloading everything.
+The first build prepares the browser-ready CSPICE bundle from a pinned upstream source archive. Build artifacts are cached under `.cache`, so repeated runs are much faster.
 
-## Install
+### Install
 
 ```bash
 npm install
 ```
 
-## Run In Development
+### Start The Dev Server
 
 ```bash
 npm run dev
 ```
 
-This automatically runs `npm run prepare:spice` first.
+This automatically prepares the WASM SPICE assets before starting Vite.
 
 Default local URL:
 
-- App: [http://localhost:5174](http://localhost:5174)
+- [http://localhost:5174](http://localhost:5174)
 
-## Build
+## Production Build
+
+Create a production build:
 
 ```bash
 npm run build
 ```
 
-This also runs `npm run prepare:spice` first and writes the production bundle to `dist`.
-
-## Preview The Production Build
+Preview the built app locally:
 
 ```bash
 npm run preview
@@ -46,51 +77,57 @@ npm run preview
 
 Default preview URL:
 
-- App: [http://localhost:4174](http://localhost:4174)
+- [http://localhost:4174](http://localhost:4174)
 
-## Force A Fresh CSPICE Rebuild
+## Rebuild The CSPICE Bundle
+
+If you want to force a fresh CSPICE rebuild:
 
 ```bash
 npm run rebuild:spice
 ```
 
-That regenerates the ignored runtime assets under:
+This regenerates the runtime assets under:
 
 - `src/spice/generated`
 - `public/spice`
 
-## End-To-End Test
+## Testing
+
+Run the Playwright end-to-end suite:
 
 ```bash
 npm run test:e2e
 ```
 
-Playwright starts the standalone app, pins the preview to a fixed date, waits for the browser-side ephemeris to finish loading, and validates exact kernel-backed CSPICE outputs.
+The tests validate the browser-side ephemeris pipeline against kernel-backed CSPICE outputs.
 
-## Deterministic Preview
+## Deterministic Demos
 
-You can pin the app to a fixed base date for debugging or demos:
+You can pin the app to a fixed date with the `date` query parameter:
 
-```bash
-npm run dev -- --host 127.0.0.1 --port 4174
-```
+- [http://localhost:5174/?date=2026-04-15T18:54:41.304Z](http://localhost:5174/?date=2026-04-15T18:54:41.304Z)
 
-Then open:
+This is useful for debugging, demos, and visual comparisons.
 
-- App: [http://127.0.0.1:4174/?date=2026-04-15T18:54:41.304Z](http://127.0.0.1:4174/?date=2026-04-15T18:54:41.304Z)
+## GitHub Pages Deployment
 
-## GitHub Pages
+This repository includes a GitHub Pages workflow at `.github/workflows/deploy.yml`.
 
-This repo now includes a GitHub Pages workflow at `.github/workflows/deploy.yml`.
+To publish the site:
 
-To enable automatic deploys:
+1. Push the repository to GitHub.
+2. Open `Settings -> Pages`.
+3. Under `Build and deployment`, choose `GitHub Actions`.
+4. Push to `main`.
 
-1. Push the repo to GitHub.
-2. In GitHub, open **Settings → Pages**.
-3. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-4. Push to `main` to trigger a deploy.
+Each push to `main` builds the app and publishes `dist` to GitHub Pages automatically.
 
-The workflow builds with `npm run build` and publishes `dist` to Pages.
-For this repository, the default deploy base path is `/${repo-name}/`, which matches project Pages URLs like `https://<user>.github.io/moon3/`.
+## Why WebAssembly SPICE?
 
-If you later switch to a custom domain or a user site (`https://<user>.github.io/`), set a repository variable named `PAGES_BASE_PATH` to `/` so the app builds with root-relative asset URLs.
+This project keeps the ephemeris logic close to the UI:
+
+- the browser computes positions directly from SPICE kernels
+- there is no API server to maintain
+- deploys are simple static-site deploys
+- demos are easy to share through GitHub Pages
