@@ -1,0 +1,266 @@
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+:root {
+  --bg-primary: #000;
+  --bg-card: rgba(9, 14, 24, 0.78);
+  --bg-card-strong: rgba(6, 9, 15, 0.88);
+  --border-color: rgba(255, 255, 255, 0.12);
+  --text-primary: #eef2ff;
+  --text-secondary: #c2cada;
+  --text-muted: #8d97ab;
+  --accent-sky: #78d7ff;
+  --accent-gold: #ffd76a;
+  --accent-success: #74e39d;
+  --accent-error: #ff9090;
+  --shadow: 0 22px 80px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(120, 215, 255, 0.1), transparent 28%),
+    radial-gradient(circle at right 15%, rgba(255, 215, 106, 0.08), transparent 24%),
+    #000;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: none;
+  cursor: pointer;
+}
+
+.ephemeris-page,
+.solar-system-container,
+.scene-shell {
+  height: 100%;
+  width: 100%;
+}
+
+.solar-system-container {
+  position: relative;
+}
+
+.hud-card {
+  backdrop-filter: blur(18px);
+  background: linear-gradient(180deg, var(--bg-card), var(--bg-card-strong));
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  position: absolute;
+  z-index: 20;
+}
+
+.hud-card--timeline {
+  bottom: 20px;
+  left: 50%;
+  max-width: min(560px, calc(100vw - 40px));
+  min-width: min(560px, calc(100vw - 40px));
+  padding: 1rem 1.1rem;
+  transform: translateX(-50%);
+}
+
+.hud-label {
+  color: var(--text-muted);
+  display: block;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.loading-overlay,
+.error-overlay {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30;
+}
+
+.loading-overlay {
+  color: var(--text-secondary);
+}
+
+.error-overlay {
+  background: rgba(68, 9, 18, 0.75);
+  border: 1px solid rgba(255, 144, 144, 0.35);
+  border-radius: 16px;
+  color: var(--accent-error);
+  padding: 1rem 1.25rem;
+  text-align: center;
+}
+
+.loader {
+  animation: spin 1s linear infinite;
+  border: 3px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border-top-color: var(--accent-sky);
+  height: 42px;
+  width: 42px;
+}
+
+.camera-indicator {
+  color: var(--text-primary);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1rem;
+  left: 20px;
+  letter-spacing: 0.08em;
+  position: absolute;
+  text-shadow: 0 0 20px rgba(0, 0, 0, 0.9);
+  text-transform: uppercase;
+  top: 20px;
+  z-index: 20;
+}
+
+.timeline-button {
+  background: linear-gradient(135deg, rgba(120, 215, 255, 0.95), rgba(53, 116, 255, 0.92));
+  border-radius: 999px;
+  color: #07101c;
+  font-weight: 700;
+  padding: 0.72rem 1.15rem;
+  transition:
+    transform 0.18s ease,
+    opacity 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.timeline-button:hover:not(:disabled) {
+  box-shadow: 0 12px 32px rgba(46, 111, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.timeline-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.timeline-button--secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.timeline-header,
+.timeline-controls,
+.timeline-scale {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.timeline-header {
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.timeline-header strong {
+  display: inline-block;
+  font-size: 1.02rem;
+}
+
+.timeline-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+}
+
+.timeline-offset {
+  color: var(--text-muted);
+  display: inline-block;
+  margin-left: 0.6rem;
+}
+
+.timeline-controls {
+  gap: 0.75rem;
+  justify-content: flex-start;
+}
+
+.timeline-controls--compact {
+  margin-bottom: 0;
+}
+
+.timeline-status {
+  align-self: flex-start;
+}
+
+.timeline-sync {
+  color: var(--accent-sky);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+}
+
+.timeline-slider {
+  accent-color: var(--accent-sky);
+  cursor: pointer;
+  margin-bottom: 0.45rem;
+  width: 100%;
+}
+
+.timeline-scale {
+  color: var(--text-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .hud-card--timeline {
+    bottom: 16px;
+    left: 16px;
+    max-width: calc(100vw - 32px);
+    min-width: calc(100vw - 32px);
+    transform: none;
+  }
+
+  .camera-indicator {
+    left: 16px;
+    top: 16px;
+  }
+
+  .timeline-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .timeline-controls {
+    width: 100%;
+  }
+
+  .timeline-controls--compact {
+    justify-content: space-between;
+  }
+
+  .timeline-button {
+    padding: 0.68rem 0.95rem;
+  }
+}
