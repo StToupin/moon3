@@ -59,6 +59,7 @@ export default function App() {
   const [dayOffset, setDayOffset] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<TopBarTabId | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentCameraState, setCurrentCameraState] =
     useState<CameraStateName>(() => {
       const stepParam = new URLSearchParams(window.location.search).get(
@@ -153,7 +154,6 @@ export default function App() {
   const {
     data: moonDistanceSeries,
     error: moonDistanceError,
-    isFetching: isFetchingMoonDistance,
     isLoading: isLoadingMoonDistance,
   } = useMoonDistanceSeries(moonDistanceRequest, {
     enabled: isMoonDistanceTabOpen,
@@ -304,6 +304,12 @@ export default function App() {
       previous === MOON_DISTANCE_TAB_ID ? null : previous,
     );
   }, []);
+  const handleOpenSidebar = useCallback(() => {
+    setIsSidebarOpen(true);
+  }, []);
+  const handleCloseSidebar = useCallback(() => {
+    setIsSidebarOpen(false);
+  }, []);
 
   const currentCameraIndex = CAMERA_STATE_ORDER.indexOf(currentCameraState);
   const currentCameraLabel = formatCameraStateLabel(currentCameraState);
@@ -325,79 +331,233 @@ export default function App() {
     );
   }, [currentStep]);
 
+  useEffect(() => {
+    if (!isSidebarOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsSidebarOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSidebarOpen]);
+
   return (
     <main className="ephemeris-page">
       <div className="solar-system-container">
-        <div className="top-panel-stack">
-          <div className="hud-card hud-card--tabs">
-            <div aria-label="Top tabs" className="tab-strip">
-              <button
-                aria-controls="moon-distance-panel"
-                aria-expanded={isMoonDistanceTabOpen}
-                aria-pressed={isMoonDistanceTabOpen}
-                className={`top-tab ${isMoonDistanceTabOpen ? "top-tab--active" : ""}`}
-                onClick={handleMoonDistanceTabToggle}
-                type="button"
-              >
-                Moon Distance
-              </button>
+        <button
+          aria-controls="app-sidebar"
+          aria-label="Open menu"
+          className={`sidebar-menu-button ${isSidebarOpen ? "sidebar-menu-button--hidden" : ""}`}
+          onClick={handleOpenSidebar}
+          type="button"
+        >
+          <span aria-hidden="true" className="sidebar-menu-button__icon">
+            ≡
+          </span>
+          <span className="sidebar-menu-button__label">Menu</span>
+        </button>
+
+        <button
+          aria-label="Close menu overlay"
+          className={`sidebar-backdrop ${isSidebarOpen ? "sidebar-backdrop--visible" : ""}`}
+          onClick={handleCloseSidebar}
+          tabIndex={isSidebarOpen ? 0 : -1}
+          type="button"
+        />
+
+        <aside
+          aria-label="Controls and analysis"
+          className={`app-sidebar ${isSidebarOpen ? "app-sidebar--open" : ""}`}
+          id="app-sidebar"
+        >
+          <button
+            aria-label="Close menu"
+            className="sidebar-close-button"
+            onClick={handleCloseSidebar}
+            type="button"
+          >
+            ×
+          </button>
+
+          <div className="app-sidebar__inner">
+            <div className="hud-card hud-card--tabs">
+              <div aria-label="Top tabs" className="tab-strip">
+                <button
+                  aria-controls="moon-distance-panel"
+                  aria-expanded={isMoonDistanceTabOpen}
+                  aria-pressed={isMoonDistanceTabOpen}
+                  className={`top-tab ${isMoonDistanceTabOpen ? "top-tab--active" : ""}`}
+                  onClick={handleMoonDistanceTabToggle}
+                  type="button"
+                >
+                  Moon Distance
+                </button>
+              </div>
             </div>
-          </div>
 
-          {isMoonDistanceTabOpen && (
-            <section
-              aria-label="Moon Distance"
-              className="hud-card tab-panel"
-              id="moon-distance-panel"
-              role="region"
-            >
-              <div className="tab-panel__header">
-                <div className="tab-panel__heading">
-                  <span className="hud-label">Analysis</span>
-                  <h2>Moon Distance</h2>
-                  <p>
-                    Daily Earth-Moon center distance from one year before to one
-                    year after the selected date.
-                  </p>
-                </div>
+            <div className="app-sidebar__content">
+              {isMoonDistanceTabOpen && (
+                <section
+                  aria-label="Moon Distance"
+                  className="hud-card tab-panel"
+                  id="moon-distance-panel"
+                  role="region"
+                >
+                  <div className="tab-panel__header">
+                    <div className="tab-panel__heading">
+                      <span className="hud-label">Analysis</span>
+                      <h2>Moon Distance</h2>
+                    </div>
 
-                <div className="tab-panel__actions">
-                  {isFetchingMoonDistance && moonDistanceSeries && (
-                    <span className="tab-panel__status">Updating...</span>
+                    <div className="tab-panel__actions">
+                      <button
+                        aria-label="Close moon distance tab"
+                        className="tab-close-button"
+                        onClick={handleCloseMoonDistanceTab}
+                        type="button"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+
+                  {moonDistanceError && (
+                    <div
+                      className="tab-panel__message tab-panel__message--error"
+                      role="alert"
+                    >
+                      Error: {moonDistanceError.message}
+                    </div>
                   )}
+
+                  {isLoadingMoonDistance && !moonDistanceSeries && (
+                    <div className="tab-panel__message">
+                      <div className="loader tab-panel__loader"></div>
+                      <span>Computing daily Earth-Moon distances&hellip;</span>
+                    </div>
+                  )}
+
+                  {moonDistanceSeries && (
+                    <MoonDistanceChart series={moonDistanceSeries} />
+                  )}
+                </section>
+              )}
+            </div>
+
+            <div className="hud-card hud-card--timeline">
+              <div className="timeline-header">
+                <div>
+                  <p className="timeline-view-indicator" data-testid="camera-state">
+                    {currentCameraLabel.toUpperCase()} ({currentStep}/
+                    {CAMERA_STATE_ORDER.length})
+                  </p>
+                  <strong>{displayDate}</strong>
+                  {dayOffset !== 0 && (
+                    <span className="timeline-offset">
+                      {dayOffset > 0 ? "+" : ""}
+                      {dayOffset} days
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="timeline-toolbar">
+                <div className="timeline-controls timeline-controls--compact">
                   <button
-                    aria-label="Close moon distance tab"
-                    className="tab-close-button"
-                    onClick={handleCloseMoonDistanceTab}
+                    aria-label="Previous"
+                    className="timeline-button"
+                    disabled={currentCameraIndex === 0}
+                    onClick={() =>
+                      setCurrentCameraState(
+                        CAMERA_STATE_ORDER[currentCameraIndex - 1],
+                      )
+                    }
                     type="button"
                   >
-                    Close
+                    <span aria-hidden="true" className="timeline-button__icon">
+                      ←
+                    </span>
+                    <span aria-hidden="true" className="timeline-button__label">
+                      Back
+                    </span>
+                  </button>
+                  <button
+                    aria-label="Next"
+                    className="timeline-button"
+                    disabled={currentCameraIndex === CAMERA_STATE_ORDER.length - 1}
+                    onClick={() =>
+                      setCurrentCameraState(
+                        CAMERA_STATE_ORDER[currentCameraIndex + 1],
+                      )
+                    }
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="timeline-button__label">
+                      Next
+                    </span>
+                    <span aria-hidden="true" className="timeline-button__icon">
+                      →
+                    </span>
+                  </button>
+                </div>
+
+                <div className="timeline-controls timeline-controls--compact">
+                  <button
+                    aria-label={isPlaying ? "Pause" : "Play"}
+                    className="timeline-button"
+                    onClick={() => setIsPlaying((previous) => !previous)}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="timeline-button__icon">
+                      {isPlaying ? "❚❚" : "▶"}
+                    </span>
+                    <span aria-hidden="true" className="timeline-button__label">
+                      {isPlaying ? "Pause" : "Play"}
+                    </span>
+                  </button>
+                  <button
+                    aria-label="Reset"
+                    className="timeline-button timeline-button--secondary"
+                    onClick={() => {
+                      setDayOffset(0);
+                      setIsPlaying(false);
+                    }}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="timeline-button__icon">
+                      ↺
+                    </span>
+                    <span aria-hidden="true" className="timeline-button__label">
+                      Reset
+                    </span>
                   </button>
                 </div>
               </div>
 
-              {moonDistanceError && (
-                <div
-                  className="tab-panel__message tab-panel__message--error"
-                  role="alert"
-                >
-                  Error: {moonDistanceError.message}
-                </div>
-              )}
+              <input
+                aria-label="Ephemeris day offset"
+                className="timeline-slider"
+                max={MAX_DAY_OFFSET}
+                min={MIN_DAY_OFFSET}
+                onChange={handleSliderChange}
+                step={1}
+                type="range"
+                value={dayOffset}
+              />
 
-              {isLoadingMoonDistance && !moonDistanceSeries && (
-                <div className="tab-panel__message">
-                  <div className="loader tab-panel__loader"></div>
-                  <span>Computing daily Earth-Moon distances&hellip;</span>
-                </div>
-              )}
-
-              {moonDistanceSeries && (
-                <MoonDistanceChart series={moonDistanceSeries} />
-              )}
-            </section>
-          )}
-        </div>
+              <div className="timeline-scale">
+                <span>-365d</span>
+                <span>Now</span>
+                <span>+365d</span>
+              </div>
+            </div>
+          </div>
+        </aside>
 
         <div className="scene-stage">
           {combinedError && (
@@ -430,114 +590,6 @@ export default function App() {
               />
             </Suspense>
           )}
-        </div>
-
-        <div className="hud-card hud-card--timeline">
-          <div className="timeline-header">
-            <div>
-              <p className="timeline-view-indicator" data-testid="camera-state">
-                {currentCameraLabel.toUpperCase()} ({currentStep}/
-                {CAMERA_STATE_ORDER.length})
-              </p>
-              <strong>{displayDate}</strong>
-              {dayOffset !== 0 && (
-                <span className="timeline-offset">
-                  {dayOffset > 0 ? "+" : ""}
-                  {dayOffset} days
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="timeline-toolbar">
-            <div className="timeline-controls timeline-controls--compact">
-              <button
-                aria-label="Previous"
-                className="timeline-button"
-                disabled={currentCameraIndex === 0}
-                onClick={() =>
-                  setCurrentCameraState(
-                    CAMERA_STATE_ORDER[currentCameraIndex - 1],
-                  )
-                }
-                type="button"
-              >
-                <span aria-hidden="true" className="timeline-button__icon">
-                  ←
-                </span>
-                <span aria-hidden="true" className="timeline-button__label">
-                  Back
-                </span>
-              </button>
-              <button
-                aria-label="Next"
-                className="timeline-button"
-                disabled={currentCameraIndex === CAMERA_STATE_ORDER.length - 1}
-                onClick={() =>
-                  setCurrentCameraState(
-                    CAMERA_STATE_ORDER[currentCameraIndex + 1],
-                  )
-                }
-                type="button"
-              >
-                <span aria-hidden="true" className="timeline-button__label">
-                  Next
-                </span>
-                <span aria-hidden="true" className="timeline-button__icon">
-                  →
-                </span>
-              </button>
-            </div>
-
-            <div className="timeline-controls timeline-controls--compact">
-              <button
-                aria-label={isPlaying ? "Pause" : "Play"}
-                className="timeline-button"
-                onClick={() => setIsPlaying((previous) => !previous)}
-                type="button"
-              >
-                <span aria-hidden="true" className="timeline-button__icon">
-                  {isPlaying ? "❚❚" : "▶"}
-                </span>
-                <span aria-hidden="true" className="timeline-button__label">
-                  {isPlaying ? "Pause" : "Play"}
-                </span>
-              </button>
-              <button
-                aria-label="Reset"
-                className="timeline-button timeline-button--secondary"
-                onClick={() => {
-                  setDayOffset(0);
-                  setIsPlaying(false);
-                }}
-                type="button"
-              >
-                <span aria-hidden="true" className="timeline-button__icon">
-                  ↺
-                </span>
-                <span aria-hidden="true" className="timeline-button__label">
-                  Reset
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <input
-            aria-label="Ephemeris day offset"
-            className="timeline-slider"
-            max={MAX_DAY_OFFSET}
-            min={MIN_DAY_OFFSET}
-            onChange={handleSliderChange}
-            step={1}
-            type="range"
-            value={dayOffset}
-          />
-
-          <div className="timeline-scale">
-            <span>-365d</span>
-            <span>Now</span>
-            <span>+365d</span>
-          </div>
         </div>
       </div>
     </main>

@@ -174,23 +174,30 @@ test("opens and closes the moon distance tab and renders the SVG chart", async (
     "km",
   );
 
-  await moonDistancePanel.getByTestId("moon-distance-chart").hover({
-    position: { x: 420, y: 140 },
+  const chart = moonDistancePanel.getByTestId("moon-distance-chart");
+  const chartBox = await chart.boundingBox();
+  if (!chartBox) {
+    throw new Error("Unable to measure chart layout");
+  }
+  const hoverPosition = {
+    x: chartBox.width * 0.5,
+    y: chartBox.height * 0.44,
+  };
+
+  await chart.hover({
+    position: hoverPosition,
   });
   await expect(moonDistancePanel.getByTestId("moon-distance-tooltip")).toBeVisible();
   await expect(moonDistancePanel.getByTestId("moon-distance-tooltip")).toContainText(
     "km",
   );
-  const chartBox = await moonDistancePanel
-    .getByTestId("moon-distance-chart")
-    .boundingBox();
   const hoverMarkerBox = await moonDistancePanel
     .getByTestId("moon-distance-hover-marker")
     .boundingBox();
-  if (!chartBox || !hoverMarkerBox) {
-    throw new Error("Unable to measure chart hover layout");
+  if (!hoverMarkerBox) {
+    throw new Error("Unable to measure chart hover marker layout");
   }
-  const hoveredCursorX = chartBox.x + 420;
+  const hoveredCursorX = chartBox.x + hoverPosition.x;
   const hoverMarkerCenterX = hoverMarkerBox.x + hoverMarkerBox.width / 2;
   expect(Math.abs(hoverMarkerCenterX - hoveredCursorX)).toBeLessThan(16);
 
@@ -220,4 +227,44 @@ test("opens and closes the moon distance tab and renders the SVG chart", async (
 
   await moonDistanceTab.click();
   await expect(page.getByRole("region", { name: "Moon Distance" })).toHaveCount(0);
+});
+
+test("opens the mobile sidebar drawer and keeps the chart controls available", async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({
+    width: 390,
+    height: 844,
+  });
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({
+    latitude: 48.8566,
+    longitude: 2.3522,
+  });
+
+  await page.goto(`/?date=${encodeURIComponent(FIXED_DATE)}`);
+
+  const openMenuButton = page.getByRole("button", { name: "Open menu" });
+  const sidebar = page.locator("#app-sidebar");
+
+  await expect(openMenuButton).toBeVisible();
+  await openMenuButton.click();
+
+  await expect(sidebar).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Close menu", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Previous" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Moon Distance", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Moon Distance" }).getByTestId(
+      "moon-distance-chart",
+    ),
+  ).toBeVisible({ timeout: 120_000 });
+
+  await page.getByRole("button", { name: "Close menu", exact: true }).click();
+  await expect(sidebar).not.toBeVisible();
+  await expect(openMenuButton).toBeVisible();
 });
