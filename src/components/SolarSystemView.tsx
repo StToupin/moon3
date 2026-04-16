@@ -269,8 +269,8 @@ export const CAMERA_STATE_ORDER: CameraStateName[] = [
   "schematic",
   "solar_system",
   "earth_moon",
-  "earth",
   "moon",
+  "earth",
 ];
 
 export function formatCameraStateLabel(state: CameraStateName): string {
@@ -302,7 +302,6 @@ export function SolarSystemView({
   currentState,
 }: SolarSystemViewProps) {
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
-  const currentStep = CAMERA_STATE_ORDER.indexOf(currentState) + 1;
 
   const cameraStates: Record<CameraStateName, CameraDisplayState> = {
     schematic: {
@@ -348,9 +347,14 @@ export function SolarSystemView({
 
   const schematicMode = currentState === "schematic";
   const showEarthTexture =
-    currentStep === 1 || currentStep === 3 || currentStep === 4;
-  const showSunTexture = currentStep === 1;
-  const showOrbits = currentStep <= 3;
+    currentState === "schematic" ||
+    currentState === "earth_moon" ||
+    currentState === "earth";
+  const showSunTexture = currentState === "schematic";
+  const showOrbits =
+    currentState === "schematic" ||
+    currentState === "solar_system" ||
+    currentState === "earth_moon";
 
   return (
     <div className="scene-shell">
