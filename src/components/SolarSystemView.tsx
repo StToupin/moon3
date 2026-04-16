@@ -34,6 +34,13 @@ interface CameraTransition {
   elapsed: number;
 }
 
+interface LiveCameraDebugState {
+  viewName: string;
+  position: [number, number, number];
+  target: [number, number, number];
+  fov: number;
+}
+
 const CAMERA_TRANSITION_DURATION = 0.8;
 const MOBILE_MAX_WIDTH = 720;
 const MOBILE_FOV_MULTIPLIERS: Record<CameraStateName, number> = {
@@ -117,6 +124,30 @@ function applyCameraSnapshot(
   }
 }
 
+function toTuple(vector: Vector3): [number, number, number] {
+  return [vector.x, vector.y, vector.z];
+}
+
+function updateLiveCameraDebugState(
+  camera: PerspectiveCamera,
+  target: Vector3,
+  viewName: string,
+) {
+  const previousDebugState = window.__wasmSpiceDebug as
+    | { liveCamera?: LiveCameraDebugState | null }
+    | undefined;
+
+  window.__wasmSpiceDebug = {
+    ...previousDebugState,
+    liveCamera: {
+      viewName,
+      position: toTuple(camera.position),
+      target: toTuple(target),
+      fov: camera.fov,
+    },
+  };
+}
+
 function CameraController({
   targetState,
   viewName,
@@ -128,6 +159,7 @@ function CameraController({
   const zoomFactorRef = useRef(1);
   const lastTargetRef = useRef<Vector3 | null>(null);
   const lastBaseDistanceRef = useRef<number | null>(null);
+  const liveTargetRef = useRef<Vector3 | null>(null);
   const transitionRef = useRef<CameraTransition | null>(null);
   const hasInitializedRef = useRef(false);
   const mobileFovMultiplier =
@@ -171,13 +203,17 @@ function CameraController({
       quaternion,
       fov,
     }, false);
+    liveTargetRef.current = target.clone();
+    updateLiveCameraDebugState(camera, target, viewName);
 
     if (progress >= 1) {
       transitionRef.current = null;
       applyCameraSnapshot(camera, controlsRef.current, transition.end);
+      liveTargetRef.current = transition.end.target.clone();
       if (controlsRef.current) {
         controlsRef.current.enabled = true;
       }
+      updateLiveCameraDebugState(camera, transition.end.target, viewName);
     }
   });
 
@@ -194,14 +230,17 @@ function CameraController({
     );
     const baseDistance = targetPosition.distanceTo(lookAtTarget);
     const viewChanged = viewName !== lastViewRef.current;
+    const transition = transitionRef.current;
 
     if (viewChanged) {
       zoomFactorRef.current = 1;
     } else if (
+      !transition &&
       lastTargetRef.current !== null &&
       lastBaseDistanceRef.current !== null
     ) {
-      const currentDistance = camera.position.distanceTo(lastTargetRef.current);
+      const previousTarget = liveTargetRef.current ?? lastTargetRef.current;
+      const currentDistance = camera.position.distanceTo(previousTarget);
       if (lastBaseDistanceRef.current > 0) {
         zoomFactorRef.current = currentDistance / lastBaseDistanceRef.current;
       }
@@ -230,6 +269,8 @@ function CameraController({
 
     if (!hasInitializedRef.current) {
       applyCameraSnapshot(camera, controlsRef.current, nextSnapshot);
+      liveTargetRef.current = nextSnapshot.target.clone();
+      updateLiveCameraDebugState(camera, nextSnapshot.target, viewName);
       hasInitializedRef.current = true;
       transitionRef.current = null;
       lastViewRef.current = viewName;
@@ -240,7 +281,9 @@ function CameraController({
       transitionRef.current = {
         start: captureCameraSnapshot(
           camera,
-          controlsRef.current?.target.clone() ?? lookAtTarget.clone(),
+          liveTargetRef.current?.clone() ??
+            controlsRef.current?.target.clone() ??
+            lookAtTarget.clone(),
         ),
         end: nextSnapshot,
         elapsed: 0,
@@ -253,11 +296,22 @@ function CameraController({
       return;
     }
 
+    if (transition) {
+      transition.end = nextSnapshot;
+      if (controlsRef.current) {
+        controlsRef.current.enabled = false;
+      }
+      lastViewRef.current = viewName;
+      return;
+    }
+
     transitionRef.current = null;
     applyCameraSnapshot(camera, controlsRef.current, nextSnapshot);
+    liveTargetRef.current = nextSnapshot.target.clone();
     if (controlsRef.current) {
       controlsRef.current.enabled = true;
     }
+    updateLiveCameraDebugState(camera, nextSnapshot.target, viewName);
     lastViewRef.current = viewName;
   }, [adjustedFov, camera, controlsRef, targetState, viewName]);
 

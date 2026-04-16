@@ -143,6 +143,98 @@ test("persists the step query param and only requests textures for the matching 
   await expect.poll(() => requestedAssets.has("/sun-texture.jpg")).toBe(true);
 });
 
+test("switching views during playback lands on the newly selected camera", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({
+    latitude: 48.8566,
+    longitude: 2.3522,
+  });
+
+  await page.goto(`/?date=${encodeURIComponent(FIXED_DATE)}`);
+
+  await expect(page.getByTestId("camera-state")).toHaveText("MOON (4/5)", {
+    timeout: 120_000,
+  });
+
+  await page.getByRole("button", { name: "Play" }).click();
+  await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
+  await page.waitForTimeout(250);
+
+  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(page.getByTestId("camera-state")).toHaveText("EARTH (5/5)");
+
+  const alignedCamera = await page.waitForFunction(
+    () => {
+      const snapshot = window.__wasmSpiceDebug as
+        | {
+            ephemeris?: {
+              moonCamera?: {
+                position?: number[];
+              };
+              surfacePoint?: number[];
+            };
+            liveCamera?: {
+              fov?: number;
+              position?: number[];
+              target?: number[];
+              viewName?: string;
+            } | null;
+          }
+        | undefined;
+      const expectedPosition = snapshot?.ephemeris?.moonCamera?.position;
+      const expectedTarget = snapshot?.ephemeris?.surfacePoint;
+      const liveCamera = snapshot?.liveCamera;
+
+      if (
+        !expectedPosition ||
+        !expectedTarget ||
+        !liveCamera?.position ||
+        !liveCamera.target ||
+        liveCamera.viewName !== "earth"
+      ) {
+        return null;
+      }
+
+      const positionDelta = Math.hypot(
+        liveCamera.position[0] - expectedPosition[0],
+        liveCamera.position[1] - expectedPosition[1],
+        liveCamera.position[2] - expectedPosition[2],
+      );
+      const targetDelta = Math.hypot(
+        liveCamera.target[0] - expectedTarget[0],
+        liveCamera.target[1] - expectedTarget[1],
+        liveCamera.target[2] - expectedTarget[2],
+      );
+      const fovDelta = Math.abs((liveCamera.fov ?? 0) - 70);
+
+      if (positionDelta > 5 || targetDelta > 5 || fovDelta > 0.5) {
+        return null;
+      }
+
+      return {
+        fovDelta,
+        positionDelta,
+        targetDelta,
+      };
+    },
+    undefined,
+    { timeout: 10_000 },
+  );
+
+  const alignment = (await alignedCamera.jsonValue()) as {
+    fovDelta: number;
+    positionDelta: number;
+    targetDelta: number;
+  };
+
+  expect(alignment.positionDelta).toBeLessThan(5);
+  expect(alignment.targetDelta).toBeLessThan(5);
+  expect(alignment.fovDelta).toBeLessThan(0.5);
+});
+
 test("renders the moon distance card and SVG chart", async ({
   page,
   context,

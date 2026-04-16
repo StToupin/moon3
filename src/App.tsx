@@ -315,7 +315,12 @@ export default function App() {
   }, [data, orbits]);
 
   useEffect(() => {
+    const previousDebugState = window.__wasmSpiceDebug as
+      | { liveCamera?: unknown }
+      | undefined;
+
     window.__wasmSpiceDebug = {
+      liveCamera: previousDebugState?.liveCamera ?? null,
       status: combinedError
         ? "error"
         : solarSystemData && orbits

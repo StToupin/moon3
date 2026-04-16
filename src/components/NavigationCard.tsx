@@ -50,6 +50,52 @@ function TimelineArrowIcon({ direction }: TimelineArrowIconProps) {
   );
 }
 
+function TimelinePlayPauseIcon({ isPlaying }: { isPlaying: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="timeline-button__glyph"
+      viewBox="0 0 12 12"
+    >
+      {isPlaying ? (
+        <>
+          <rect fill="currentColor" height="7" rx="0.75" width="2.25" x="2" y="2.5" />
+          <rect fill="currentColor" height="7" rx="0.75" width="2.25" x="7.75" y="2.5" />
+        </>
+      ) : (
+        <path d="M3 2.25v7.5L9.25 6 3 2.25Z" fill="currentColor" />
+      )}
+    </svg>
+  );
+}
+
+function TimelineResetIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="timeline-button__glyph"
+      viewBox="0 0 12 12"
+    >
+      <path
+        d="M9.2 4.25A4 4 0 1 0 10 6.7"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M9.15 1.9v2.7h-2.7"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+
 export function NavigationCard({
   cameraStateTestId,
   className,
@@ -177,7 +223,7 @@ export function NavigationCard({
                 type="button"
               >
                 <span aria-hidden="true" className="timeline-button__icon">
-                  {isPlaying ? "❚❚" : "▶"}
+                  <TimelinePlayPauseIcon isPlaying={isPlaying} />
                 </span>
               </button>
               <button
@@ -187,7 +233,7 @@ export function NavigationCard({
                 type="button"
               >
                 <span aria-hidden="true" className="timeline-button__icon">
-                  ↺
+                  <TimelineResetIcon />
                 </span>
               </button>
             </div>
