@@ -26,10 +26,16 @@ const AU_KM = 149597870.7;
 const MOON_ORBITAL_PERIOD_SECONDS = 27.32 * 24 * 60 * 60;
 const EARTH_ORBITAL_PERIOD_SECONDS = 365.25 * 24 * 60 * 60;
 const ORBIT_STEPS = 360;
-const DISTANCE_SERIES_DAY_RANGE = 365;
+const DISTANCE_SERIES_MONTH_RANGE = 6;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const PHASE_SEARCH_STEP_MS = 12 * 60 * 60 * 1000;
+const YEARLY_EXTREMA_STEP_MS = 6 * 60 * 60 * 1000;
+const EXTREMA_REFINEMENT_STEPS = 30;
+const PHASE_REFINEMENT_STEPS = 24;
+const TWO_PI = Math.PI * 2;
 
 type BodyName = "SUN" | "EARTH" | "MOON";
+export type MoonPhaseName = "new" | "first_quarter" | "full" | "last_quarter";
 
 interface BodyInfo {
   id: number;
@@ -80,9 +86,17 @@ export interface MoonDistanceSample {
   distanceKm: number;
 }
 
+export interface MoonPhaseEvent {
+  phase: MoonPhaseName;
+  timestamp: string;
+  distanceKm: number;
+  isSupermoon: boolean;
+}
+
 export interface MoonDistanceSeriesReply {
   referenceTimestamp: string;
   samples: MoonDistanceSample[];
+  phaseEvents: MoonPhaseEvent[];
 }
 
 const BODY_INFOS: Record<BodyName, BodyInfo> = {
@@ -101,6 +115,12 @@ function parseDate(dateString: string): Date {
   }
 
   return parsedDate;
+}
+
+function addUtcMonths(date: Date, months: number): Date {
+  const adjustedDate = new Date(date.getTime());
+  adjustedDate.setUTCMonth(adjustedDate.getUTCMonth() + months);
+  return adjustedDate;
 }
 
 function toVector3(values: number[]): Vector3Tuple {
@@ -133,6 +153,27 @@ function vectorSub(a: Vector3Tuple, b: Vector3Tuple): Vector3Tuple {
 
 function vectorLength(vector: Vector3Tuple): number {
   return Math.hypot(vector[0], vector[1], vector[2]);
+}
+
+function vectorLongitude(vector: Vector3Tuple): number {
+  return normalizeAngle(Math.atan2(vector[1], vector[0]));
+}
+
+function normalizeAngle(angle: number): number {
+  const normalized = angle % TWO_PI;
+  return normalized < 0 ? normalized + TWO_PI : normalized;
+}
+
+function unwrapAngleDelta(delta: number): number {
+  if (delta <= -Math.PI) {
+    return delta + TWO_PI;
+  }
+
+  if (delta > Math.PI) {
+    return delta - TWO_PI;
+  }
+
+  return delta;
 }
 
 function mxv(matrix: Matrix3, vector: Vector3Tuple): Vector3Tuple {
@@ -268,6 +309,221 @@ function computeOrbitPoints(
   return etValues.map((et) => spkez(runtime, bodyId, et, REFERENCE_FRAME, 0).positionKm);
 }
 
+function getPhaseTargetAngle(phase: MoonPhaseName): number {
+  switch (phase) {
+    case "new":
+      return 0;
+    case "first_quarter":
+      return Math.PI / 2;
+    case "full":
+      return Math.PI;
+    case "last_quarter":
+      return (3 * Math.PI) / 2;
+  }
+}
+
+function refineDistanceExtremum(
+  leftTimeMs: number,
+  rightTimeMs: number,
+  mode: "min" | "max",
+  getDistanceKm: (timeMs: number) => number,
+): number {
+  let left = leftTimeMs;
+  let right = rightTimeMs;
+
+  for (let index = 0; index < EXTREMA_REFINEMENT_STEPS; index += 1) {
+    const firstThird = left + (right - left) / 3;
+    const secondThird = right - (right - left) / 3;
+    const firstDistance = getDistanceKm(firstThird);
+    const secondDistance = getDistanceKm(secondThird);
+
+    if (
+      (mode === "min" && firstDistance <= secondDistance) ||
+      (mode === "max" && firstDistance >= secondDistance)
+    ) {
+      right = secondThird;
+    } else {
+      left = firstThird;
+    }
+  }
+
+  return getDistanceKm((left + right) / 2);
+}
+
+function buildNolleThresholds(
+  rangeStartTimeMs: number,
+  rangeEndTimeMs: number,
+  getDistanceKm: (timeMs: number) => number,
+): Map<number, number> {
+  const thresholds = new Map<number, number>();
+  const startYear = new Date(rangeStartTimeMs).getUTCFullYear();
+  const endYear = new Date(rangeEndTimeMs).getUTCFullYear();
+
+  for (let year = startYear; year <= endYear; year += 1) {
+    const yearStartTimeMs = Date.UTC(year, 0, 1, 0, 0, 0, 0);
+    const yearEndTimeMs = Date.UTC(year + 1, 0, 1, 0, 0, 0, 0) - 1;
+    let minimumDistance = Number.POSITIVE_INFINITY;
+    let maximumDistance = Number.NEGATIVE_INFINITY;
+    let minimumTimeMs = yearStartTimeMs;
+    let maximumTimeMs = yearStartTimeMs;
+
+    for (
+      let sampleTimeMs = yearStartTimeMs;
+      sampleTimeMs <= yearEndTimeMs;
+      sampleTimeMs += YEARLY_EXTREMA_STEP_MS
+    ) {
+      const distanceKm = getDistanceKm(sampleTimeMs);
+
+      if (distanceKm < minimumDistance) {
+        minimumDistance = distanceKm;
+        minimumTimeMs = sampleTimeMs;
+      }
+
+      if (distanceKm > maximumDistance) {
+        maximumDistance = distanceKm;
+        maximumTimeMs = sampleTimeMs;
+      }
+    }
+
+    const refinedMinimumDistance = refineDistanceExtremum(
+      Math.max(yearStartTimeMs, minimumTimeMs - YEARLY_EXTREMA_STEP_MS),
+      Math.min(yearEndTimeMs, minimumTimeMs + YEARLY_EXTREMA_STEP_MS),
+      "min",
+      getDistanceKm,
+    );
+    const refinedMaximumDistance = refineDistanceExtremum(
+      Math.max(yearStartTimeMs, maximumTimeMs - YEARLY_EXTREMA_STEP_MS),
+      Math.min(yearEndTimeMs, maximumTimeMs + YEARLY_EXTREMA_STEP_MS),
+      "max",
+      getDistanceKm,
+    );
+
+    thresholds.set(
+      year,
+      refinedMinimumDistance +
+        (refinedMaximumDistance - refinedMinimumDistance) * 0.1,
+    );
+  }
+
+  return thresholds;
+}
+
+function refinePhaseEventTimeMs(
+  startTimeMs: number,
+  endTimeMs: number,
+  startAngle: number,
+  startContinuousAngle: number,
+  targetContinuousAngle: number,
+  getLongitudeSeparationRadians: (timeMs: number) => number,
+): number {
+  let left = startTimeMs;
+  let right = endTimeMs;
+
+  for (let index = 0; index < PHASE_REFINEMENT_STEPS; index += 1) {
+    const midpoint = (left + right) / 2;
+    let delta = unwrapAngleDelta(
+      getLongitudeSeparationRadians(midpoint) - startAngle,
+    );
+
+    if (delta < 0) {
+      delta += TWO_PI;
+    }
+
+    const midpointContinuousAngle = startContinuousAngle + delta;
+
+    if (midpointContinuousAngle < targetContinuousAngle) {
+      left = midpoint;
+    } else {
+      right = midpoint;
+    }
+  }
+
+  return (left + right) / 2;
+}
+
+function buildMoonPhaseEvents(
+  rangeStartTimeMs: number,
+  rangeEndTimeMs: number,
+  getLongitudeSeparationRadians: (timeMs: number) => number,
+  getDistanceKm: (timeMs: number) => number,
+  nolleThresholds: Map<number, number>,
+): MoonPhaseEvent[] {
+  const phaseNames: MoonPhaseName[] = [
+    "new",
+    "first_quarter",
+    "full",
+    "last_quarter",
+  ];
+  const phaseEvents: MoonPhaseEvent[] = [];
+  let previousTimeMs = rangeStartTimeMs;
+  let previousAngle = getLongitudeSeparationRadians(previousTimeMs);
+  let previousContinuousAngle = previousAngle;
+
+  for (
+    let nextTimeMs = rangeStartTimeMs + PHASE_SEARCH_STEP_MS;
+    nextTimeMs <= rangeEndTimeMs + PHASE_SEARCH_STEP_MS;
+    nextTimeMs += PHASE_SEARCH_STEP_MS
+  ) {
+    const clampedNextTimeMs = Math.min(nextTimeMs, rangeEndTimeMs);
+    if (clampedNextTimeMs <= previousTimeMs) {
+      continue;
+    }
+
+    const nextAngle = getLongitudeSeparationRadians(clampedNextTimeMs);
+    let angleDelta = unwrapAngleDelta(nextAngle - previousAngle);
+
+    if (angleDelta <= 0) {
+      angleDelta += TWO_PI;
+    }
+
+    const nextContinuousAngle = previousContinuousAngle + angleDelta;
+
+    for (const phase of phaseNames) {
+      const targetAngle = getPhaseTargetAngle(phase);
+      let targetContinuousAngle =
+        targetAngle +
+        (Math.floor((previousContinuousAngle - targetAngle) / TWO_PI) + 1) *
+          TWO_PI;
+
+      while (targetContinuousAngle <= nextContinuousAngle) {
+        const eventTimeMs = refinePhaseEventTimeMs(
+          previousTimeMs,
+          clampedNextTimeMs,
+          previousAngle,
+          previousContinuousAngle,
+          targetContinuousAngle,
+          getLongitudeSeparationRadians,
+        );
+        const distanceKm = getDistanceKm(eventTimeMs);
+        const eventYear = new Date(eventTimeMs).getUTCFullYear();
+        const nolleThreshold = nolleThresholds.get(eventYear);
+        const isSupermoon =
+          (phase === "new" || phase === "full") &&
+          nolleThreshold !== undefined &&
+          distanceKm <= nolleThreshold;
+
+        phaseEvents.push({
+          phase,
+          timestamp: new Date(eventTimeMs).toISOString(),
+          distanceKm,
+          isSupermoon,
+        });
+
+        targetContinuousAngle += TWO_PI;
+      }
+    }
+
+    previousTimeMs = clampedNextTimeMs;
+    previousAngle = nextAngle;
+    previousContinuousAngle = nextContinuousAngle;
+  }
+
+  return phaseEvents.filter((phaseEvent) => {
+    const eventTimeMs = Date.parse(phaseEvent.timestamp);
+    return eventTimeMs >= rangeStartTimeMs && eventTimeMs <= rangeEndTimeMs;
+  });
+}
+
 export async function getEphemeris(request: {
   date: string;
   latitude: number;
@@ -359,31 +615,100 @@ async function buildMoonDistanceSeriesReply(
   date: Date,
 ): Promise<MoonDistanceSeriesReply> {
   const runtime = await getSpiceRuntime();
-  const samples = Array.from(
-    { length: DISTANCE_SERIES_DAY_RANGE * 2 + 1 },
-    (_, index) => {
-      const dayOffset = index - DISTANCE_SERIES_DAY_RANGE;
-      const sampleDate = new Date(date.getTime() + dayOffset * DAY_MS);
-      const et = str2et(runtime, formatSpiceTime(sampleDate));
-      const moonPositionRelativeToEarth = spkez(
-        runtime,
-        MOON_ID,
-        et,
-        REFERENCE_FRAME,
-        EARTH_ID,
-      ).positionKm;
+  const etCache = new Map<number, number>();
+  const moonPositionCache = new Map<number, Vector3Tuple>();
+  const sunPositionCache = new Map<number, Vector3Tuple>();
+  const rangeStartDate = addUtcMonths(date, -DISTANCE_SERIES_MONTH_RANGE);
+  const rangeEndDate = addUtcMonths(date, DISTANCE_SERIES_MONTH_RANGE);
+  const rangeStartTimeMs = rangeStartDate.getTime();
+  const rangeEndTimeMs = rangeEndDate.getTime();
 
-      return {
-        dayOffset,
-        timestamp: sampleDate.toISOString(),
-        distanceKm: vectorLength(moonPositionRelativeToEarth),
-      };
-    },
+  function getEt(timeMs: number): number {
+    const cachedEt = etCache.get(timeMs);
+    if (cachedEt !== undefined) {
+      return cachedEt;
+    }
+
+    const et = str2et(runtime, formatSpiceTime(new Date(timeMs)));
+    etCache.set(timeMs, et);
+    return et;
+  }
+
+  function getMoonPosition(timeMs: number): Vector3Tuple {
+    const cachedPosition = moonPositionCache.get(timeMs);
+    if (cachedPosition) {
+      return cachedPosition;
+    }
+
+    const position = spkez(
+      runtime,
+      MOON_ID,
+      getEt(timeMs),
+      REFERENCE_FRAME,
+      EARTH_ID,
+    ).positionKm;
+
+    moonPositionCache.set(timeMs, position);
+    return position;
+  }
+
+  function getSunPosition(timeMs: number): Vector3Tuple {
+    const cachedPosition = sunPositionCache.get(timeMs);
+    if (cachedPosition) {
+      return cachedPosition;
+    }
+
+    const position = spkez(
+      runtime,
+      SUN_ID,
+      getEt(timeMs),
+      REFERENCE_FRAME,
+      EARTH_ID,
+    ).positionKm;
+
+    sunPositionCache.set(timeMs, position);
+    return position;
+  }
+
+  function getDistanceKm(timeMs: number): number {
+    return vectorLength(getMoonPosition(timeMs));
+  }
+
+  function getLongitudeSeparationRadians(timeMs: number): number {
+    return normalizeAngle(
+      vectorLongitude(getMoonPosition(timeMs)) - vectorLongitude(getSunPosition(timeMs)),
+    );
+  }
+
+  const samples: MoonDistanceSample[] = [];
+  for (
+    let sampleTimeMs = rangeStartTimeMs;
+    sampleTimeMs <= rangeEndTimeMs;
+    sampleTimeMs += DAY_MS
+  ) {
+    samples.push({
+      dayOffset: Math.round((sampleTimeMs - date.getTime()) / DAY_MS),
+      timestamp: new Date(sampleTimeMs).toISOString(),
+      distanceKm: getDistanceKm(sampleTimeMs),
+    });
+  }
+  const nolleThresholds = buildNolleThresholds(
+    rangeStartTimeMs,
+    rangeEndTimeMs,
+    getDistanceKm,
+  );
+  const phaseEvents = buildMoonPhaseEvents(
+    rangeStartTimeMs,
+    rangeEndTimeMs,
+    getLongitudeSeparationRadians,
+    getDistanceKm,
+    nolleThresholds,
   );
 
   return {
     referenceTimestamp: date.toISOString(),
     samples,
+    phaseEvents,
   };
 }
 

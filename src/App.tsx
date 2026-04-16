@@ -58,7 +58,9 @@ function getCameraStateFromStep(stepParam: string | null): CameraStateName | nul
 export default function App() {
   const [dayOffset, setDayOffset] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<TopBarTabId | null>(null);
+  const [activeTab, setActiveTab] = useState<TopBarTabId | null>(
+    MOON_DISTANCE_TAB_ID,
+  );
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentCameraState, setCurrentCameraState] =
     useState<CameraStateName>(() => {

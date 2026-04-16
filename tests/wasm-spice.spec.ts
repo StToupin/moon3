@@ -168,10 +168,14 @@ test("opens and closes the moon distance tab and renders the SVG chart", async (
     timeout: 120_000,
   });
   await expect(moonDistancePanel.getByTestId("moon-distance-range")).toHaveText(
-    /731 daily samples/,
+    /36\d daily samples/,
   );
   await expect(moonDistancePanel.getByTestId("moon-distance-current")).toContainText(
     "km",
+  );
+  await expect(moonDistancePanel.getByTestId("moon-phase-event").first()).toBeVisible();
+  expect(await moonDistancePanel.getByTestId("moon-phase-supermoon").count()).toBeGreaterThan(
+    0,
   );
 
   const chart = moonDistancePanel.getByTestId("moon-distance-chart");

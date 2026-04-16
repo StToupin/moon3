@@ -1,12 +1,19 @@
 import { useId, useState } from "react";
-import type { MoonDistanceSeriesReply } from "../api/ephemeris";
+import type {
+  MoonDistanceSeriesReply,
+  MoonPhaseEvent,
+  MoonPhaseName,
+} from "../api/ephemeris";
 
 const SVG_WIDTH = 840;
 const SVG_HEIGHT = 320;
-const PADDING_TOP = 20;
+const PADDING_TOP = 28;
 const PADDING_RIGHT = 18;
 const PADDING_BOTTOM = 40;
 const PADDING_LEFT = 64;
+const PHASE_ICON_RADIUS = 5;
+const PHASE_HIT_RADIUS = 16;
+const SUPERMOON_HIT_RADIUS = 24;
 const TOOLTIP_MAX_WIDTH = 220;
 const TOOLTIP_EDGE_MARGIN = 12;
 const axisDateFormatter = new Intl.DateTimeFormat("en-US", {
@@ -28,7 +35,8 @@ interface MoonDistanceChartProps {
 
 type SpecialPointRole = "current" | "minimum" | "maximum";
 
-interface HoverState {
+interface SampleHoverState {
+  kind: "sample";
   pointIndex: number;
   roles: SpecialPointRole[];
   anchorX: number;
@@ -38,6 +46,19 @@ interface HoverState {
   width: number;
   height: number;
 }
+
+interface PhaseHoverState {
+  kind: "phase";
+  phaseEventIndex: number;
+  anchorX: number;
+  anchorY: number;
+  chartX: number;
+  chartY: number;
+  width: number;
+  height: number;
+}
+
+type HoverState = SampleHoverState | PhaseHoverState;
 
 function formatDistance(distanceKm: number): string {
   return `${wholeNumberFormatter.format(distanceKm)} km`;
@@ -91,6 +112,67 @@ function clampTooltipX(anchorX: number, width: number): number {
 
 function interpolate(a: number, b: number, t: number): number {
   return a + (b - a) * t;
+}
+
+function formatPhaseLabel(phase: MoonPhaseName): string {
+  switch (phase) {
+    case "new":
+      return "New Moon";
+    case "first_quarter":
+      return "First Quarter";
+    case "full":
+      return "Full Moon";
+    case "last_quarter":
+      return "Last Quarter";
+  }
+}
+
+function renderPhaseIcon(phase: MoonPhaseName) {
+  const halfDiskPathRight = [
+    `M 0 ${-PHASE_ICON_RADIUS}`,
+    `A ${PHASE_ICON_RADIUS} ${PHASE_ICON_RADIUS} 0 0 1 0 ${PHASE_ICON_RADIUS}`,
+    `L 0 ${-PHASE_ICON_RADIUS}`,
+    "Z",
+  ].join(" ");
+  const halfDiskPathLeft = [
+    `M 0 ${-PHASE_ICON_RADIUS}`,
+    `A ${PHASE_ICON_RADIUS} ${PHASE_ICON_RADIUS} 0 0 0 0 ${PHASE_ICON_RADIUS}`,
+    `L 0 ${-PHASE_ICON_RADIUS}`,
+    "Z",
+  ].join(" ");
+
+  return (
+    <>
+      <circle
+        className={`moon-distance-chart__phase-disc ${
+          phase === "full"
+            ? "moon-distance-chart__phase-disc--light"
+            : "moon-distance-chart__phase-disc--dark"
+        }`}
+        cx="0"
+        cy="0"
+        r={PHASE_ICON_RADIUS}
+      />
+      {phase === "first_quarter" && (
+        <path
+          className="moon-distance-chart__phase-disc moon-distance-chart__phase-disc--light"
+          d={halfDiskPathRight}
+        />
+      )}
+      {phase === "last_quarter" && (
+        <path
+          className="moon-distance-chart__phase-disc moon-distance-chart__phase-disc--light"
+          d={halfDiskPathLeft}
+        />
+      )}
+      <circle
+        className="moon-distance-chart__phase-outline"
+        cx="0"
+        cy="0"
+        r={PHASE_ICON_RADIUS}
+      />
+    </>
+  );
 }
 
 export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
@@ -158,9 +240,27 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
     points.find((point) => point.sample === minimumSample) ?? currentPoint;
   const maximumPoint =
     points.find((point) => point.sample === maximumSample) ?? currentPoint;
-  const hoveredPoint =
-    hoverState === null ? null : points[hoverState.pointIndex] ?? null;
   const specialRolesByPointIndex = new Map<number, SpecialPointRole[]>();
+  const rangeStartTimeMs = Date.parse(samples[0].timestamp);
+  const rangeEndTimeMs = Date.parse(samples[samples.length - 1].timestamp);
+  const rangeDurationMs = Math.max(rangeEndTimeMs - rangeStartTimeMs, 1);
+  const phaseMarkers = series.phaseEvents.map(
+    (phaseEvent: MoonPhaseEvent, index) => {
+      const timeMs = Date.parse(phaseEvent.timestamp);
+      const fraction = clamp(
+        (timeMs - rangeStartTimeMs) / rangeDurationMs,
+        0,
+        1,
+      );
+
+      return {
+        index,
+        phaseEvent,
+        x: PADDING_LEFT + fraction * plotWidth,
+        y: PADDING_TOP + ((maxDistance - phaseEvent.distanceKm) / yRange) * plotHeight,
+      };
+    },
+  );
   const areaPath = `${linePath} L ${lastPoint.x.toFixed(2)} ${(
     PADDING_TOP + plotHeight
   ).toFixed(2)} L ${firstPoint.x.toFixed(2)} ${(PADDING_TOP + plotHeight).toFixed(
@@ -184,23 +284,42 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
   registerSpecialRole(minimumPoint.index, "minimum");
   registerSpecialRole(maximumPoint.index, "maximum");
 
-  const isSpecialHover = (hoverState?.roles.length ?? 0) > 0;
+  const hoveredPoint =
+    hoverState?.kind === "sample" ? points[hoverState.pointIndex] ?? null : null;
+  const hoveredPhaseMarker =
+    hoverState?.kind === "phase"
+      ? phaseMarkers[hoverState.phaseEventIndex] ?? null
+      : null;
+  const isSpecialHover =
+    hoverState?.kind === "sample" && hoverState.roles.length > 0;
   const tooltipVerticalClass =
     hoverState !== null && !isSpecialHover && hoverState.anchorY < 110
       ? "moon-distance-tooltip--below"
       : "moon-distance-tooltip--above";
   const tooltipLeft =
     hoverState === null ? 0 : clampTooltipX(hoverState.anchorX, hoverState.width);
-  const tooltipTitle = hoveredPoint
-    ? detailDateFormatter.format(new Date(hoveredPoint.sample.timestamp))
-    : "";
-  const tooltipContext = hoveredPoint
-    ? formatDayOffset(hoveredPoint.sample.dayOffset)
-    : "";
-  const tooltipSpecialLabel =
-    hoverState === null || hoverState.roles.length === 0
-      ? null
-      : hoverState.roles.map(formatSpecialPointRole).join(" • ");
+  const tooltipTitle = hoveredPhaseMarker
+    ? formatPhaseLabel(hoveredPhaseMarker.phaseEvent.phase)
+    : hoveredPoint
+      ? detailDateFormatter.format(new Date(hoveredPoint.sample.timestamp))
+      : "";
+  const tooltipValue = hoveredPhaseMarker
+    ? formatDistance(hoveredPhaseMarker.phaseEvent.distanceKm)
+    : hoveredPoint
+      ? formatDistance(hoveredPoint.sample.distanceKm)
+      : "";
+  const tooltipContext = hoveredPhaseMarker
+    ? detailDateFormatter.format(new Date(hoveredPhaseMarker.phaseEvent.timestamp))
+    : hoveredPoint
+      ? formatDayOffset(hoveredPoint.sample.dayOffset)
+      : "";
+  const tooltipSpecialLabel = hoveredPhaseMarker
+    ? hoveredPhaseMarker.phaseEvent.isSupermoon
+      ? "Supermoon"
+      : null
+    : hoverState?.kind === "sample" && hoverState.roles.length > 0
+      ? hoverState.roles.map(formatSpecialPointRole).join(" • ")
+      : null;
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -226,6 +345,7 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
     );
 
     setHoverState({
+      kind: "sample",
       pointIndex,
       roles: [],
       anchorX,
@@ -251,12 +371,38 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
       const roles = specialRolesByPointIndex.get(pointIndex) ?? [];
 
       setHoverState({
+        kind: "sample",
         pointIndex,
         roles,
         anchorX: clamp((point.x / SVG_WIDTH) * rect.width, 0, rect.width),
         anchorY: clamp((point.y / SVG_HEIGHT) * rect.height, 0, rect.height),
         chartX: point.x,
         chartY: point.y,
+        width: rect.width,
+        height: rect.height,
+      });
+    };
+  }
+
+  function createPhaseHoverHandler(phaseEventIndex: number) {
+    return (event: React.PointerEvent<SVGCircleElement>) => {
+      event.stopPropagation();
+
+      const svg = event.currentTarget.ownerSVGElement;
+      if (!svg) {
+        return;
+      }
+
+      const rect = svg.getBoundingClientRect();
+      const marker = phaseMarkers[phaseEventIndex];
+
+      setHoverState({
+        kind: "phase",
+        phaseEventIndex,
+        anchorX: clamp((marker.x / SVG_WIDTH) * rect.width, 0, rect.width),
+        anchorY: clamp((marker.y / SVG_HEIGHT) * rect.height, 0, rect.height),
+        chartX: marker.x,
+        chartY: marker.y,
         width: rect.width,
         height: rect.height,
       });
@@ -301,8 +447,8 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
         >
           <title id={titleId}>Earth-Moon distance chart</title>
           <desc id={descriptionId}>
-            Earth-Moon center distance sampled daily from one year before to one
-            year after the selected date.
+            Earth-Moon center distance sampled daily from six months before to
+            six months after the selected date.
           </desc>
 
           <defs>
@@ -391,6 +537,34 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
           />
           <path className="moon-distance-chart__line" d={linePath} />
 
+          {phaseMarkers.map((marker) => (
+            <g
+              key={`phase-${marker.index}`}
+              data-testid={
+                marker.phaseEvent.isSupermoon
+                  ? "moon-phase-supermoon"
+                  : "moon-phase-event"
+              }
+            >
+              <g
+                className={`moon-distance-chart__phase-icon ${
+                  marker.phaseEvent.isSupermoon
+                    ? "moon-distance-chart__phase-icon--supermoon"
+                    : ""
+                }`}
+                transform={`translate(${marker.x} ${marker.y})`}
+              >
+                {marker.phaseEvent.isSupermoon && (
+                  <circle
+                    className="moon-distance-chart__phase-halo"
+                    r={PHASE_ICON_RADIUS + 4}
+                  />
+                )}
+                {renderPhaseIcon(marker.phaseEvent.phase)}
+              </g>
+            </g>
+          ))}
+
           {hoveredPoint && (
             <>
               <line
@@ -405,6 +579,23 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
                 cx={hoverState?.chartX ?? hoveredPoint.x}
                 cy={hoverState?.chartY ?? hoveredPoint.y}
                 data-testid="moon-distance-hover-marker"
+                r="6"
+              />
+            </>
+          )}
+          {hoveredPhaseMarker && (
+            <>
+              <line
+                className="moon-distance-chart__hover-line"
+                x1={hoveredPhaseMarker.x}
+                x2={hoveredPhaseMarker.x}
+                y1={PADDING_TOP}
+                y2={PADDING_TOP + plotHeight}
+              />
+              <circle
+                className="moon-distance-chart__hover-marker"
+                cx={hoveredPhaseMarker.x}
+                cy={hoveredPhaseMarker.y}
                 r="6"
               />
             </>
@@ -456,9 +647,25 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
             onPointerMove={createSpecialPointHoverHandler(maximumPoint.index)}
             r="13"
           />
+
+          {phaseMarkers.map((marker) => (
+            <circle
+              key={`phase-hit-${marker.index}`}
+              className="moon-distance-chart__phase-hit-area"
+              cx={marker.x}
+              cy={marker.y}
+              onPointerEnter={createPhaseHoverHandler(marker.index)}
+              onPointerMove={createPhaseHoverHandler(marker.index)}
+              r={
+                marker.phaseEvent.isSupermoon
+                  ? SUPERMOON_HIT_RADIUS
+                  : PHASE_HIT_RADIUS
+              }
+            />
+          ))}
         </svg>
 
-        {hoverState !== null && hoveredPoint && (
+        {hoverState !== null && (hoveredPoint || hoveredPhaseMarker) && (
           <div
             className={`moon-distance-tooltip ${tooltipVerticalClass}`}
             data-testid="moon-distance-tooltip"
@@ -473,7 +680,7 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
               </span>
             )}
             <strong>{tooltipTitle}</strong>
-            <span>{formatDistance(hoveredPoint.sample.distanceKm)}</span>
+            <span>{tooltipValue}</span>
             <small>{tooltipContext}</small>
           </div>
         )}
