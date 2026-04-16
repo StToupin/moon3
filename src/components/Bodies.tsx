@@ -137,16 +137,9 @@ export function Bodies({
     const normalMoonOrbit = rawMoonOrbit.map((point) =>
       point.clone().add(moonOrbitAlignment),
     );
-    const orbitCenter =
-      normalMoonOrbit.length > 0
-        ? normalMoonOrbit
-            .reduce((accumulator, point) => accumulator.add(point), new Vector3())
-            .divideScalar(normalMoonOrbit.length)
-        : realEarthPosition.clone();
-
     const schematicMoonOrbit = normalMoonOrbit.map((point) => {
-      const centerToPoint = point.clone().sub(orbitCenter);
-      const scaledOffset = centerToPoint.multiplyScalar(
+      const earthToPoint = point.clone().sub(realEarthPosition);
+      const scaledOffset = earthToPoint.multiplyScalar(
         SCHEMATIC_MOON_ORBIT_SCALE,
       );
       return realEarthPosition.clone().add(scaledOffset);
