@@ -35,6 +35,14 @@ interface CameraTransition {
 }
 
 const CAMERA_TRANSITION_DURATION = 0.8;
+const MOBILE_MAX_WIDTH = 720;
+const MOBILE_FOV_MULTIPLIERS: Record<CameraStateName, number> = {
+  schematic: 1.8,
+  solar_system: 1.72,
+  earth_moon: 1.45,
+  moon: 1.24,
+  earth: 1.18,
+};
 
 function interpolate(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -123,10 +131,8 @@ function CameraController({
   const transitionRef = useRef<CameraTransition | null>(null);
   const hasInitializedRef = useRef(false);
   const mobileFovMultiplier =
-    size.width <= 720
-      ? viewName === "schematic" || viewName === "solar_system"
-        ? 1.35
-        : 1.18
+    size.width <= MOBILE_MAX_WIDTH
+      ? MOBILE_FOV_MULTIPLIERS[viewName as CameraStateName]
       : 1;
   const adjustedFov = targetState.fov * mobileFovMultiplier;
 
