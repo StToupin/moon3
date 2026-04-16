@@ -143,7 +143,7 @@ test("persists the step query param and only requests textures for the matching 
   await expect.poll(() => requestedAssets.has("/sun-texture.jpg")).toBe(true);
 });
 
-test("opens and closes the moon distance tab and renders the SVG chart", async ({
+test("renders the moon distance card and SVG chart", async ({
   page,
   context,
 }) => {
@@ -155,24 +155,13 @@ test("opens and closes the moon distance tab and renders the SVG chart", async (
 
   await page.goto(`/?date=${encodeURIComponent(FIXED_DATE)}`);
 
-  const moonDistanceTab = page.getByRole("button", {
-    name: "Moon Distance",
-    exact: true,
-  });
   const moonDistancePanel = page.getByRole("region", { name: "Moon Distance" });
-
-  await moonDistanceTab.click();
 
   await expect(moonDistancePanel).toBeVisible();
   await expect(moonDistancePanel.getByTestId("moon-distance-chart")).toBeVisible({
     timeout: 120_000,
   });
-  await expect(moonDistancePanel.getByTestId("moon-distance-range")).toHaveText(
-    /36\d daily samples/,
-  );
-  await expect(moonDistancePanel.getByTestId("moon-distance-current")).toContainText(
-    "km",
-  );
+  await expect(moonDistancePanel.getByTestId("moon-distance-current-line")).toHaveCount(1);
   await expect(moonDistancePanel.getByTestId("moon-phase-event").first()).toBeVisible();
   expect(await moonDistancePanel.getByTestId("moon-phase-supermoon").count()).toBeGreaterThan(
     0,
@@ -205,32 +194,23 @@ test("opens and closes the moon distance tab and renders the SVG chart", async (
   const hoverMarkerCenterX = hoverMarkerBox.x + hoverMarkerBox.width / 2;
   expect(Math.abs(hoverMarkerCenterX - hoveredCursorX)).toBeLessThan(16);
 
-  await moonDistancePanel.getByTestId("moon-distance-current-hit-area").hover();
-  await expect(moonDistancePanel.getByTestId("moon-distance-tooltip")).toContainText(
-    "Current",
-  );
-  const currentHitAreaBox = await moonDistancePanel
-    .getByTestId("moon-distance-current-hit-area")
+  const supermoonMarkerBox = await moonDistancePanel
+    .getByTestId("moon-phase-supermoon")
+    .first()
     .boundingBox();
-  const specialTooltipBox = await moonDistancePanel
-    .getByTestId("moon-distance-tooltip")
-    .boundingBox();
-  if (!currentHitAreaBox || !specialTooltipBox) {
-    throw new Error("Unable to measure special tooltip layout");
+  if (!supermoonMarkerBox) {
+    throw new Error("Unable to measure supermoon marker layout");
   }
-  const currentHitAreaCenterY = currentHitAreaBox.y + currentHitAreaBox.height / 2;
-  expect(specialTooltipBox.y + specialTooltipBox.height).toBeLessThan(
-    currentHitAreaCenterY,
+  await page.mouse.move(
+    supermoonMarkerBox.x + supermoonMarkerBox.width / 2,
+    supermoonMarkerBox.y + supermoonMarkerBox.height / 2,
   );
-
-  await page.getByRole("button", { name: "Close moon distance tab" }).click();
-  await expect(page.getByRole("region", { name: "Moon Distance" })).toHaveCount(0);
-
-  await moonDistanceTab.click();
-  await expect(moonDistancePanel.getByTestId("moon-distance-chart")).toBeVisible();
-
-  await moonDistanceTab.click();
-  await expect(page.getByRole("region", { name: "Moon Distance" })).toHaveCount(0);
+  await expect(moonDistancePanel.getByTestId("moon-distance-tooltip")).toContainText(
+    "Full Moon",
+  );
+  await expect(moonDistancePanel.getByTestId("moon-distance-tooltip")).not.toContainText(
+    "New Moon",
+  );
 });
 
 test("opens the mobile sidebar drawer and keeps the chart controls available", async ({
@@ -251,17 +231,18 @@ test("opens the mobile sidebar drawer and keeps the chart controls available", a
 
   const openMenuButton = page.getByRole("button", { name: "Open menu" });
   const sidebar = page.locator("#app-sidebar");
+  const previousButton = page.getByRole("button", { name: "Previous" });
 
   await expect(openMenuButton).toBeVisible();
+  await expect(previousButton).toBeVisible();
   await openMenuButton.click();
 
   await expect(sidebar).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Close menu", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Previous" })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "Previous" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Moon Distance", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Moon Distance" }).getByTestId(
       "moon-distance-chart",
@@ -271,4 +252,5 @@ test("opens the mobile sidebar drawer and keeps the chart controls available", a
   await page.getByRole("button", { name: "Close menu", exact: true }).click();
   await expect(sidebar).not.toBeVisible();
   await expect(openMenuButton).toBeVisible();
+  await expect(previousButton).toBeVisible();
 });

@@ -10,7 +10,7 @@ const SVG_HEIGHT = 320;
 const PADDING_TOP = 28;
 const PADDING_RIGHT = 18;
 const PADDING_BOTTOM = 40;
-const PADDING_LEFT = 64;
+const PADDING_LEFT = 84;
 const PHASE_ICON_RADIUS = 5;
 const PHASE_HIT_RADIUS = 16;
 const SUPERMOON_HIT_RADIUS = 24;
@@ -33,12 +33,9 @@ interface MoonDistanceChartProps {
   series: MoonDistanceSeriesReply;
 }
 
-type SpecialPointRole = "current" | "minimum" | "maximum";
-
 interface SampleHoverState {
   kind: "sample";
   pointIndex: number;
-  roles: SpecialPointRole[];
   anchorX: number;
   anchorY: number;
   chartX: number;
@@ -83,17 +80,6 @@ function formatDayOffset(dayOffset: number): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
-}
-
-function formatSpecialPointRole(role: SpecialPointRole): string {
-  switch (role) {
-    case "current":
-      return "Current";
-    case "minimum":
-      return "Minimum";
-    case "maximum":
-      return "Maximum";
-  }
 }
 
 function clampTooltipX(anchorX: number, width: number): number {
@@ -194,9 +180,6 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
   const maximumSample = samples.reduce((highest, sample) =>
     sample.distanceKm > highest.distanceKm ? sample : highest,
   );
-  const currentSample =
-    samples.find((sample) => sample.dayOffset === 0) ??
-    samples[Math.floor(samples.length / 2)];
   const distanceSpan = maximumSample.distanceKm - minimumSample.distanceKm;
   const yPadding =
     distanceSpan === 0
@@ -224,6 +207,9 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
       y,
     };
   });
+  const currentPoint =
+    points.find((point) => point.sample.dayOffset === 0) ??
+    points[Math.floor(points.length / 2)];
 
   const linePath = points
     .map(
@@ -233,14 +219,6 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
     .join(" ");
   const firstPoint = points[0];
   const lastPoint = points[points.length - 1];
-  const currentPoint =
-    points.find((point) => point.sample.dayOffset === 0) ??
-    points[Math.floor(points.length / 2)];
-  const minimumPoint =
-    points.find((point) => point.sample === minimumSample) ?? currentPoint;
-  const maximumPoint =
-    points.find((point) => point.sample === maximumSample) ?? currentPoint;
-  const specialRolesByPointIndex = new Map<number, SpecialPointRole[]>();
   const rangeStartTimeMs = Date.parse(samples[0].timestamp);
   const rangeEndTimeMs = Date.parse(samples[samples.length - 1].timestamp);
   const rangeDurationMs = Math.max(rangeEndTimeMs - rangeStartTimeMs, 1);
@@ -267,33 +245,14 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
     2,
   )} Z`;
 
-  function registerSpecialRole(pointIndex: number, role: SpecialPointRole) {
-    const existingRoles = specialRolesByPointIndex.get(pointIndex);
-
-    if (existingRoles) {
-      if (!existingRoles.includes(role)) {
-        existingRoles.push(role);
-      }
-      return;
-    }
-
-    specialRolesByPointIndex.set(pointIndex, [role]);
-  }
-
-  registerSpecialRole(currentPoint.index, "current");
-  registerSpecialRole(minimumPoint.index, "minimum");
-  registerSpecialRole(maximumPoint.index, "maximum");
-
   const hoveredPoint =
     hoverState?.kind === "sample" ? points[hoverState.pointIndex] ?? null : null;
   const hoveredPhaseMarker =
     hoverState?.kind === "phase"
       ? phaseMarkers[hoverState.phaseEventIndex] ?? null
       : null;
-  const isSpecialHover =
-    hoverState?.kind === "sample" && hoverState.roles.length > 0;
   const tooltipVerticalClass =
-    hoverState !== null && !isSpecialHover && hoverState.anchorY < 110
+    hoverState !== null && hoverState.anchorY < 110
       ? "moon-distance-tooltip--below"
       : "moon-distance-tooltip--above";
   const tooltipLeft =
@@ -317,9 +276,7 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
     ? hoveredPhaseMarker.phaseEvent.isSupermoon
       ? "Supermoon"
       : null
-    : hoverState?.kind === "sample" && hoverState.roles.length > 0
-      ? hoverState.roles.map(formatSpecialPointRole).join(" • ")
-      : null;
+    : null;
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -347,7 +304,6 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
     setHoverState({
       kind: "sample",
       pointIndex,
-      roles: [],
       anchorX,
       anchorY,
       chartX,
@@ -355,33 +311,6 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
       width: rect.width,
       height: rect.height,
     });
-  }
-
-  function createSpecialPointHoverHandler(pointIndex: number) {
-    return (event: React.PointerEvent<SVGCircleElement>) => {
-      event.stopPropagation();
-
-      const svg = event.currentTarget.ownerSVGElement;
-      if (!svg) {
-        return;
-      }
-
-      const rect = svg.getBoundingClientRect();
-      const point = points[pointIndex];
-      const roles = specialRolesByPointIndex.get(pointIndex) ?? [];
-
-      setHoverState({
-        kind: "sample",
-        pointIndex,
-        roles,
-        anchorX: clamp((point.x / SVG_WIDTH) * rect.width, 0, rect.width),
-        anchorY: clamp((point.y / SVG_HEIGHT) * rect.height, 0, rect.height),
-        chartX: point.x,
-        chartY: point.y,
-        width: rect.width,
-        height: rect.height,
-      });
-    };
   }
 
   function createPhaseHoverHandler(phaseEventIndex: number) {
@@ -411,30 +340,6 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
 
   return (
     <div className="moon-distance-chart-shell">
-      <div className="moon-distance-stats">
-        <div className="moon-distance-stat" data-testid="moon-distance-current">
-          <span className="hud-label">Current</span>
-          <strong>{formatDistance(currentSample.distanceKm)}</strong>
-          <small>{detailDateFormatter.format(new Date(currentSample.timestamp))}</small>
-        </div>
-        <div className="moon-distance-stat">
-          <span className="hud-label">Minimum</span>
-          <strong>{formatDistance(minimumSample.distanceKm)}</strong>
-          <small>{detailDateFormatter.format(new Date(minimumSample.timestamp))}</small>
-        </div>
-        <div className="moon-distance-stat">
-          <span className="hud-label">Maximum</span>
-          <strong>{formatDistance(maximumSample.distanceKm)}</strong>
-          <small>{detailDateFormatter.format(new Date(maximumSample.timestamp))}</small>
-        </div>
-      </div>
-
-      <p className="moon-distance-range" data-testid="moon-distance-range">
-        {wholeNumberFormatter.format(samples.length)} daily samples from{" "}
-        {detailDateFormatter.format(new Date(samples[0].timestamp))} to{" "}
-        {detailDateFormatter.format(new Date(samples[samples.length - 1].timestamp))}
-      </p>
-
       <div className="moon-distance-chart-frame">
         <svg
           aria-labelledby={`${titleId} ${descriptionId}`}
@@ -522,20 +427,20 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
             );
           })}
 
-          <line
-            className="moon-distance-chart__current-line"
-            x1={currentPoint.x}
-            x2={currentPoint.x}
-            y1={PADDING_TOP}
-            y2={PADDING_TOP + plotHeight}
-          />
-
           <path
             className="moon-distance-chart__area"
             d={areaPath}
             fill={`url(#${gradientId})`}
           />
           <path className="moon-distance-chart__line" d={linePath} />
+          <line
+            className="moon-distance-chart__current-line"
+            data-testid="moon-distance-current-line"
+            x1={currentPoint.x}
+            x2={currentPoint.x}
+            y1={PADDING_TOP}
+            y2={PADDING_TOP + plotHeight}
+          />
 
           {phaseMarkers.map((marker) => (
             <g
@@ -600,53 +505,6 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
               />
             </>
           )}
-
-          <circle
-            className="moon-distance-chart__marker moon-distance-chart__marker--current"
-            cx={currentPoint.x}
-            cy={currentPoint.y}
-            r="5"
-          />
-          <circle
-            className="moon-distance-chart__marker"
-            cx={minimumPoint.x}
-            cy={minimumPoint.y}
-            r="4"
-          />
-          <circle
-            className="moon-distance-chart__marker"
-            cx={maximumPoint.x}
-            cy={maximumPoint.y}
-            r="4"
-          />
-
-          <circle
-            className="moon-distance-chart__special-hit-area"
-            cx={currentPoint.x}
-            cy={currentPoint.y}
-            data-testid="moon-distance-current-hit-area"
-            onPointerEnter={createSpecialPointHoverHandler(currentPoint.index)}
-            onPointerMove={createSpecialPointHoverHandler(currentPoint.index)}
-            r="13"
-          />
-          <circle
-            className="moon-distance-chart__special-hit-area"
-            cx={minimumPoint.x}
-            cy={minimumPoint.y}
-            data-testid="moon-distance-minimum-hit-area"
-            onPointerEnter={createSpecialPointHoverHandler(minimumPoint.index)}
-            onPointerMove={createSpecialPointHoverHandler(minimumPoint.index)}
-            r="13"
-          />
-          <circle
-            className="moon-distance-chart__special-hit-area"
-            cx={maximumPoint.x}
-            cy={maximumPoint.y}
-            data-testid="moon-distance-maximum-hit-area"
-            onPointerEnter={createSpecialPointHoverHandler(maximumPoint.index)}
-            onPointerMove={createSpecialPointHoverHandler(maximumPoint.index)}
-            r="13"
-          />
 
           {phaseMarkers.map((marker) => (
             <circle

@@ -1,5 +1,4 @@
 import {
-  Suspense,
   startTransition,
   useCallback,
   useDeferredValue,
@@ -8,11 +7,12 @@ import {
   useState,
 } from "react";
 import { getBody, unflattenMatrix, unflattenOrbit } from "./api/ephemeris";
-import { MoonDistanceChart } from "./components/MoonDistanceChart";
+import { AppSidebar } from "./components/AppSidebar";
+import { NavigationCard } from "./components/NavigationCard";
+import { SceneStage } from "./components/SceneStage";
 import {
   CAMERA_STATE_ORDER,
   formatCameraStateLabel,
-  SolarSystemView,
   type CameraStateName,
 } from "./components/SolarSystemView";
 import type { Cameras, OrbitsData, SolarSystem } from "./components/types";
@@ -32,9 +32,6 @@ const DEFAULT_CAMERA_STEP = 4;
 const DEFAULT_CAMERA_STATE: CameraStateName =
   CAMERA_STATE_ORDER[DEFAULT_CAMERA_STEP - 1] ?? "moon";
 const STEP_SEARCH_PARAM = "step";
-const MOON_DISTANCE_TAB_ID = "moon_distance";
-
-type TopBarTabId = typeof MOON_DISTANCE_TAB_ID;
 
 declare global {
   interface Window {
@@ -58,9 +55,6 @@ function getCameraStateFromStep(stepParam: string | null): CameraStateName | nul
 export default function App() {
   const [dayOffset, setDayOffset] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [activeTab, setActiveTab] = useState<TopBarTabId | null>(
-    MOON_DISTANCE_TAB_ID,
-  );
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentCameraState, setCurrentCameraState] =
     useState<CameraStateName>(() => {
@@ -141,7 +135,6 @@ export default function App() {
     () => ({ date: deferredIsoDate }),
     [deferredIsoDate],
   );
-  const isMoonDistanceTabOpen = activeTab === MOON_DISTANCE_TAB_ID;
 
   const {
     data,
@@ -157,9 +150,7 @@ export default function App() {
     data: moonDistanceSeries,
     error: moonDistanceError,
     isLoading: isLoadingMoonDistance,
-  } = useMoonDistanceSeries(moonDistanceRequest, {
-    enabled: isMoonDistanceTabOpen,
-  });
+  } = useMoonDistanceSeries(moonDistanceRequest);
   const { data: diagnostics } = useSpiceDiagnostics();
 
   const combinedError = ephemerisError ?? orbitsError;
@@ -296,16 +287,6 @@ export default function App() {
     },
     [],
   );
-  const handleMoonDistanceTabToggle = useCallback(() => {
-    setActiveTab((previous) =>
-      previous === MOON_DISTANCE_TAB_ID ? null : MOON_DISTANCE_TAB_ID,
-    );
-  }, []);
-  const handleCloseMoonDistanceTab = useCallback(() => {
-    setActiveTab((previous) =>
-      previous === MOON_DISTANCE_TAB_ID ? null : previous,
-    );
-  }, []);
   const handleOpenSidebar = useCallback(() => {
     setIsSidebarOpen(true);
   }, []);
@@ -316,6 +297,36 @@ export default function App() {
   const currentCameraIndex = CAMERA_STATE_ORDER.indexOf(currentCameraState);
   const currentCameraLabel = formatCameraStateLabel(currentCameraState);
   const currentStep = currentCameraIndex + 1;
+  const handlePreviousCamera = useCallback(() => {
+    setCurrentCameraState(CAMERA_STATE_ORDER[currentCameraIndex - 1]);
+  }, [currentCameraIndex]);
+  const handleNextCamera = useCallback(() => {
+    setCurrentCameraState(CAMERA_STATE_ORDER[currentCameraIndex + 1]);
+  }, [currentCameraIndex]);
+  const handleTogglePlayback = useCallback(() => {
+    setIsPlaying((previous) => !previous);
+  }, []);
+  const handleResetTimeline = useCallback(() => {
+    setDayOffset(0);
+    setIsPlaying(false);
+  }, []);
+  const navigationCardProps = {
+    canGoNext: currentCameraIndex < CAMERA_STATE_ORDER.length - 1,
+    canGoPrevious: currentCameraIndex > 0,
+    currentCameraLabel,
+    currentStep,
+    dayOffset,
+    displayDate,
+    isPlaying,
+    maxDayOffset: MAX_DAY_OFFSET,
+    minDayOffset: MIN_DAY_OFFSET,
+    onNext: handleNextCamera,
+    onPrevious: handlePreviousCamera,
+    onReset: handleResetTimeline,
+    onSliderChange: handleSliderChange,
+    onTogglePlayback: handleTogglePlayback,
+    totalSteps: CAMERA_STATE_ORDER.length,
+  };
 
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -372,227 +383,31 @@ export default function App() {
           type="button"
         />
 
-        <aside
-          aria-label="Controls and analysis"
-          className={`app-sidebar ${isSidebarOpen ? "app-sidebar--open" : ""}`}
-          id="app-sidebar"
-        >
-          <button
-            aria-label="Close menu"
-            className="sidebar-close-button"
-            onClick={handleCloseSidebar}
-            type="button"
-          >
-            ×
-          </button>
+        <AppSidebar
+          isLoadingMoonDistance={isLoadingMoonDistance}
+          isOpen={isSidebarOpen}
+          moonDistanceError={moonDistanceError}
+          moonDistanceSeries={moonDistanceSeries}
+          navigationCardProps={navigationCardProps}
+          onCloseSidebar={handleCloseSidebar}
+        />
 
-          <div className="app-sidebar__inner">
-            <div className="hud-card hud-card--tabs">
-              <div aria-label="Top tabs" className="tab-strip">
-                <button
-                  aria-controls="moon-distance-panel"
-                  aria-expanded={isMoonDistanceTabOpen}
-                  aria-pressed={isMoonDistanceTabOpen}
-                  className={`top-tab ${isMoonDistanceTabOpen ? "top-tab--active" : ""}`}
-                  onClick={handleMoonDistanceTabToggle}
-                  type="button"
-                >
-                  Moon Distance
-                </button>
-              </div>
-            </div>
+        <SceneStage
+          currentCameraState={currentCameraState}
+          error={combinedError}
+          isLoadingEphemeris={isLoadingEphemeris}
+          isLoadingOrbits={isLoadingOrbits}
+          solarSystemData={solarSystemData}
+        />
 
-            <div className="app-sidebar__content">
-              {isMoonDistanceTabOpen && (
-                <section
-                  aria-label="Moon Distance"
-                  className="hud-card tab-panel"
-                  id="moon-distance-panel"
-                  role="region"
-                >
-                  <div className="tab-panel__header">
-                    <div className="tab-panel__heading">
-                      <span className="hud-label">Analysis</span>
-                      <h2>Moon Distance</h2>
-                    </div>
-
-                    <div className="tab-panel__actions">
-                      <button
-                        aria-label="Close moon distance tab"
-                        className="tab-close-button"
-                        onClick={handleCloseMoonDistanceTab}
-                        type="button"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
-
-                  {moonDistanceError && (
-                    <div
-                      className="tab-panel__message tab-panel__message--error"
-                      role="alert"
-                    >
-                      Error: {moonDistanceError.message}
-                    </div>
-                  )}
-
-                  {isLoadingMoonDistance && !moonDistanceSeries && (
-                    <div className="tab-panel__message">
-                      <div className="loader tab-panel__loader"></div>
-                      <span>Computing daily Earth-Moon distances&hellip;</span>
-                    </div>
-                  )}
-
-                  {moonDistanceSeries && (
-                    <MoonDistanceChart series={moonDistanceSeries} />
-                  )}
-                </section>
-              )}
-            </div>
-
-            <div className="hud-card hud-card--timeline">
-              <div className="timeline-header">
-                <div>
-                  <p className="timeline-view-indicator" data-testid="camera-state">
-                    {currentCameraLabel.toUpperCase()} ({currentStep}/
-                    {CAMERA_STATE_ORDER.length})
-                  </p>
-                  <strong>{displayDate}</strong>
-                  {dayOffset !== 0 && (
-                    <span className="timeline-offset">
-                      {dayOffset > 0 ? "+" : ""}
-                      {dayOffset} days
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="timeline-toolbar">
-                <div className="timeline-controls timeline-controls--compact">
-                  <button
-                    aria-label="Previous"
-                    className="timeline-button"
-                    disabled={currentCameraIndex === 0}
-                    onClick={() =>
-                      setCurrentCameraState(
-                        CAMERA_STATE_ORDER[currentCameraIndex - 1],
-                      )
-                    }
-                    type="button"
-                  >
-                    <span aria-hidden="true" className="timeline-button__icon">
-                      ←
-                    </span>
-                    <span aria-hidden="true" className="timeline-button__label">
-                      Back
-                    </span>
-                  </button>
-                  <button
-                    aria-label="Next"
-                    className="timeline-button"
-                    disabled={currentCameraIndex === CAMERA_STATE_ORDER.length - 1}
-                    onClick={() =>
-                      setCurrentCameraState(
-                        CAMERA_STATE_ORDER[currentCameraIndex + 1],
-                      )
-                    }
-                    type="button"
-                  >
-                    <span aria-hidden="true" className="timeline-button__label">
-                      Next
-                    </span>
-                    <span aria-hidden="true" className="timeline-button__icon">
-                      →
-                    </span>
-                  </button>
-                </div>
-
-                <div className="timeline-controls timeline-controls--compact">
-                  <button
-                    aria-label={isPlaying ? "Pause" : "Play"}
-                    className="timeline-button"
-                    onClick={() => setIsPlaying((previous) => !previous)}
-                    type="button"
-                  >
-                    <span aria-hidden="true" className="timeline-button__icon">
-                      {isPlaying ? "❚❚" : "▶"}
-                    </span>
-                    <span aria-hidden="true" className="timeline-button__label">
-                      {isPlaying ? "Pause" : "Play"}
-                    </span>
-                  </button>
-                  <button
-                    aria-label="Reset"
-                    className="timeline-button timeline-button--secondary"
-                    onClick={() => {
-                      setDayOffset(0);
-                      setIsPlaying(false);
-                    }}
-                    type="button"
-                  >
-                    <span aria-hidden="true" className="timeline-button__icon">
-                      ↺
-                    </span>
-                    <span aria-hidden="true" className="timeline-button__label">
-                      Reset
-                    </span>
-                  </button>
-                </div>
-              </div>
-
-              <input
-                aria-label="Ephemeris day offset"
-                className="timeline-slider"
-                max={MAX_DAY_OFFSET}
-                min={MIN_DAY_OFFSET}
-                onChange={handleSliderChange}
-                step={1}
-                type="range"
-                value={dayOffset}
-              />
-
-              <div className="timeline-scale">
-                <span>-365d</span>
-                <span>Now</span>
-                <span>+365d</span>
-              </div>
-            </div>
+        {!isSidebarOpen && (
+          <div className="mobile-bottom-bar">
+            <NavigationCard
+              className="app-navigation-card app-navigation-card--mobile"
+              {...navigationCardProps}
+            />
           </div>
-        </aside>
-
-        <div className="scene-stage">
-          {combinedError && (
-            <div className="error-overlay" role="alert">
-              Error: {combinedError.message}
-            </div>
-          )}
-
-          {(isLoadingEphemeris || isLoadingOrbits) && !solarSystemData && (
-            <div className="loading-overlay">
-              <div className="loader"></div>
-              <span>Loading browser-side ephemeris&hellip;</span>
-            </div>
-          )}
-
-          {solarSystemData && (
-            <Suspense
-              fallback={
-                <div className="loading-overlay">
-                  <div className="loader"></div>
-                  <span>Loading 3D scene&hellip;</span>
-                </div>
-              }
-            >
-              <SolarSystemView
-                solarSystem={solarSystemData.solarSystem}
-                cameras={solarSystemData.cameras}
-                currentState={currentCameraState}
-                surfacePoint={solarSystemData.surfacePoint}
-              />
-            </Suspense>
-          )}
-        </div>
+        )}
       </div>
     </main>
   );

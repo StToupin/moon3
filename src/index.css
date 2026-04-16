@@ -59,7 +59,7 @@ button {
 
 .solar-system-container {
   display: grid;
-  grid-template-columns: minmax(420px, 520px) minmax(0, 1fr);
+  grid-template-columns: minmax(460px, 580px) minmax(0, 1fr);
   position: relative;
 }
 
@@ -94,6 +94,10 @@ button {
   padding-right: 0.15rem;
 }
 
+.mobile-bottom-bar {
+  display: none;
+}
+
 .sidebar-menu-button,
 .sidebar-backdrop,
 .sidebar-close-button {
@@ -124,45 +128,6 @@ button {
   text-transform: uppercase;
 }
 
-.hud-card--tabs {
-  padding: 0.35rem;
-}
-
-.tab-strip {
-  display: flex;
-  gap: 0.55rem;
-  width: 100%;
-}
-
-.top-tab {
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  color: var(--text-secondary);
-  flex: 1 1 auto;
-  font-weight: 600;
-  padding: 0.72rem 1.1rem;
-  text-align: left;
-  transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
-}
-
-.top-tab:hover {
-  border-color: rgba(120, 215, 255, 0.2);
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-
-.top-tab--active {
-  background: linear-gradient(135deg, rgba(120, 215, 255, 0.18), rgba(255, 215, 106, 0.16));
-  border-color: rgba(120, 215, 255, 0.24);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-}
-
 .tab-panel {
   max-width: none;
   overflow: visible;
@@ -173,54 +138,12 @@ button {
 .tab-panel__header {
   align-items: flex-start;
   display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: 0.9rem;
 }
 
 .tab-panel__heading h2 {
   font-size: 1.16rem;
   margin-top: 0.28rem;
-}
-
-.tab-panel__heading p {
-  color: var(--text-secondary);
-  margin-top: 0.35rem;
-  max-width: 60ch;
-}
-
-.tab-panel__actions {
-  align-items: center;
-  display: flex;
-  flex-shrink: 0;
-  gap: 0.75rem;
-}
-
-.tab-panel__status {
-  color: var(--accent-sky);
-  font-family: "JetBrains Mono", monospace;
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.tab-close-button {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 999px;
-  color: var(--text-primary);
-  font-weight: 600;
-  padding: 0.62rem 1rem;
-  transition:
-    background 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.18s ease;
-}
-
-.tab-close-button:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.24);
-  transform: translateY(-1px);
 }
 
 .tab-panel__message {
@@ -247,36 +170,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
-}
-
-.moon-distance-stats {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-}
-
-.moon-distance-stat {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 0.9rem 1rem;
-}
-
-.moon-distance-stat strong {
-  display: block;
-  font-size: 1.05rem;
-  margin-top: 0.35rem;
-}
-
-.moon-distance-stat small {
-  color: var(--text-secondary);
-  display: block;
-  margin-top: 0.25rem;
-}
-
-.moon-distance-range {
-  color: var(--text-secondary);
-  font-size: 0.92rem;
 }
 
 .moon-distance-chart {
@@ -307,14 +200,15 @@ button {
 .moon-distance-chart__axis-label {
   fill: var(--text-muted);
   font-family: "JetBrains Mono", monospace;
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.02em;
 }
 
 .moon-distance-chart__current-line {
-  stroke: rgba(255, 215, 106, 0.55);
-  stroke-dasharray: 6 8;
-  stroke-width: 1.5;
+  stroke: rgba(255, 215, 106, 0.94);
+  stroke-dasharray: 7 7;
+  stroke-linecap: round;
+  stroke-width: 2.1;
 }
 
 .moon-distance-chart__hover-line {
@@ -364,25 +258,10 @@ button {
   pointer-events: all;
 }
 
-.moon-distance-chart__marker {
-  fill: var(--accent-gold);
-  stroke: rgba(3, 8, 15, 0.9);
-  stroke-width: 2;
-}
-
-.moon-distance-chart__marker--current {
-  fill: var(--accent-sky);
-}
-
 .moon-distance-chart__hover-marker {
   fill: #fff;
   stroke: rgba(7, 16, 28, 0.96);
   stroke-width: 2.5;
-}
-
-.moon-distance-chart__special-hit-area {
-  fill: transparent;
-  pointer-events: all;
 }
 
 .moon-distance-tooltip {
@@ -413,7 +292,7 @@ button {
   color: var(--accent-gold);
   display: block;
   font-family: "JetBrains Mono", monospace;
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   letter-spacing: 0.08em;
   margin-bottom: 0.3rem;
   text-transform: uppercase;
@@ -421,20 +300,21 @@ button {
 
 .moon-distance-tooltip strong {
   display: block;
-  font-size: 0.95rem;
+  font-size: 1.08rem;
 }
 
 .moon-distance-tooltip span {
   color: var(--accent-sky);
   display: block;
   font-family: "JetBrains Mono", monospace;
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   margin-top: 0.25rem;
 }
 
 .moon-distance-tooltip small {
   color: var(--text-secondary);
   display: block;
+  font-size: 0.88rem;
   margin-top: 0.18rem;
 }
 
@@ -617,6 +497,23 @@ button {
     z-index: 45;
   }
 
+  .mobile-bottom-bar {
+    bottom: 0;
+    display: block;
+    left: 0;
+    padding: 0 1rem calc(1rem + env(safe-area-inset-bottom));
+    pointer-events: none;
+    position: fixed;
+    right: 0;
+    z-index: 45;
+  }
+
+  .app-navigation-card--mobile {
+    margin-top: 0;
+    pointer-events: auto;
+    width: 100%;
+  }
+
   .sidebar-menu-button--hidden {
     opacity: 0;
     pointer-events: none;
@@ -700,16 +597,7 @@ button {
   }
 
   .tab-panel__header {
-    flex-direction: column;
-  }
-
-  .tab-panel__actions {
-    justify-content: space-between;
-    width: 100%;
-  }
-
-  .moon-distance-stats {
-    grid-template-columns: 1fr;
+    margin-bottom: 0.8rem;
   }
 
   .timeline-toolbar {

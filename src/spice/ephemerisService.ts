@@ -29,10 +29,12 @@ const ORBIT_STEPS = 360;
 const DISTANCE_SERIES_MONTH_RANGE = 6;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PHASE_SEARCH_STEP_MS = 12 * 60 * 60 * 1000;
-const YEARLY_EXTREMA_STEP_MS = 6 * 60 * 60 * 1000;
+const DISTANCE_EXTREMA_STEP_MS = 6 * 60 * 60 * 1000;
+const DISTANCE_EXTREMA_SEARCH_PADDING_MS = 40 * DAY_MS;
 const EXTREMA_REFINEMENT_STEPS = 30;
 const PHASE_REFINEMENT_STEPS = 24;
 const TWO_PI = Math.PI * 2;
+const FULL_SUPERMOON_THRESHOLD = 0.9;
 
 type BodyName = "SUN" | "EARTH" | "MOON";
 export type MoonPhaseName = "new" | "first_quarter" | "full" | "last_quarter";
@@ -97,6 +99,12 @@ export interface MoonDistanceSeriesReply {
   referenceTimestamp: string;
   samples: MoonDistanceSample[];
   phaseEvents: MoonPhaseEvent[];
+}
+
+interface LunarDistanceExtremum {
+  kind: "apogee" | "perigee";
+  timeMs: number;
+  distanceKm: number;
 }
 
 const BODY_INFOS: Record<BodyName, BodyInfo> = {
@@ -327,7 +335,7 @@ function refineDistanceExtremum(
   rightTimeMs: number,
   mode: "min" | "max",
   getDistanceKm: (timeMs: number) => number,
-): number {
+): LunarDistanceExtremum {
   let left = leftTimeMs;
   let right = rightTimeMs;
 
@@ -347,65 +355,115 @@ function refineDistanceExtremum(
     }
   }
 
-  return getDistanceKm((left + right) / 2);
+  const timeMs = (left + right) / 2;
+
+  return {
+    kind: mode === "min" ? "perigee" : "apogee",
+    timeMs,
+    distanceKm: getDistanceKm(timeMs),
+  };
 }
 
-function buildNolleThresholds(
+function buildLunarDistanceExtrema(
   rangeStartTimeMs: number,
   rangeEndTimeMs: number,
   getDistanceKm: (timeMs: number) => number,
-): Map<number, number> {
-  const thresholds = new Map<number, number>();
-  const startYear = new Date(rangeStartTimeMs).getUTCFullYear();
-  const endYear = new Date(rangeEndTimeMs).getUTCFullYear();
-
-  for (let year = startYear; year <= endYear; year += 1) {
-    const yearStartTimeMs = Date.UTC(year, 0, 1, 0, 0, 0, 0);
-    const yearEndTimeMs = Date.UTC(year + 1, 0, 1, 0, 0, 0, 0) - 1;
-    let minimumDistance = Number.POSITIVE_INFINITY;
-    let maximumDistance = Number.NEGATIVE_INFINITY;
-    let minimumTimeMs = yearStartTimeMs;
-    let maximumTimeMs = yearStartTimeMs;
-
-    for (
-      let sampleTimeMs = yearStartTimeMs;
-      sampleTimeMs <= yearEndTimeMs;
-      sampleTimeMs += YEARLY_EXTREMA_STEP_MS
-    ) {
-      const distanceKm = getDistanceKm(sampleTimeMs);
-
-      if (distanceKm < minimumDistance) {
-        minimumDistance = distanceKm;
-        minimumTimeMs = sampleTimeMs;
-      }
-
-      if (distanceKm > maximumDistance) {
-        maximumDistance = distanceKm;
-        maximumTimeMs = sampleTimeMs;
-      }
-    }
-
-    const refinedMinimumDistance = refineDistanceExtremum(
-      Math.max(yearStartTimeMs, minimumTimeMs - YEARLY_EXTREMA_STEP_MS),
-      Math.min(yearEndTimeMs, minimumTimeMs + YEARLY_EXTREMA_STEP_MS),
-      "min",
-      getDistanceKm,
-    );
-    const refinedMaximumDistance = refineDistanceExtremum(
-      Math.max(yearStartTimeMs, maximumTimeMs - YEARLY_EXTREMA_STEP_MS),
-      Math.min(yearEndTimeMs, maximumTimeMs + YEARLY_EXTREMA_STEP_MS),
-      "max",
-      getDistanceKm,
-    );
-
-    thresholds.set(
-      year,
-      refinedMinimumDistance +
-        (refinedMaximumDistance - refinedMinimumDistance) * 0.1,
-    );
+): LunarDistanceExtremum[] {
+  const sampleTimes: number[] = [];
+  for (
+    let sampleTimeMs = rangeStartTimeMs;
+    sampleTimeMs <= rangeEndTimeMs;
+    sampleTimeMs += DISTANCE_EXTREMA_STEP_MS
+  ) {
+    sampleTimes.push(sampleTimeMs);
   }
 
-  return thresholds;
+  if (sampleTimes[sampleTimes.length - 1] !== rangeEndTimeMs) {
+    sampleTimes.push(rangeEndTimeMs);
+  }
+
+  const sampleDistances = sampleTimes.map((timeMs) => getDistanceKm(timeMs));
+  const extrema: LunarDistanceExtremum[] = [];
+
+  for (let index = 1; index < sampleTimes.length - 1; index += 1) {
+    const previousDistance = sampleDistances[index - 1];
+    const currentDistance = sampleDistances[index];
+    const nextDistance = sampleDistances[index + 1];
+    const leftTimeMs = sampleTimes[index - 1];
+    const rightTimeMs = sampleTimes[index + 1];
+
+    if (currentDistance <= previousDistance && currentDistance < nextDistance) {
+      extrema.push(
+        refineDistanceExtremum(leftTimeMs, rightTimeMs, "min", getDistanceKm),
+      );
+      continue;
+    }
+
+    if (currentDistance >= previousDistance && currentDistance > nextDistance) {
+      extrema.push(
+        refineDistanceExtremum(leftTimeMs, rightTimeMs, "max", getDistanceKm),
+      );
+    }
+  }
+
+  return extrema;
+}
+
+function findNearestExtremum(
+  extrema: LunarDistanceExtremum[],
+  targetTimeMs: number,
+): LunarDistanceExtremum | null {
+  let previousExtremum: LunarDistanceExtremum | null = null;
+  let nextExtremum: LunarDistanceExtremum | null = null;
+
+  for (const extremum of extrema) {
+    if (extremum.timeMs <= targetTimeMs) {
+      previousExtremum = extremum;
+      continue;
+    }
+
+    nextExtremum = extremum;
+    break;
+  }
+
+  if (!previousExtremum) {
+    return nextExtremum;
+  }
+
+  if (!nextExtremum) {
+    return previousExtremum;
+  }
+
+  return Math.abs(targetTimeMs - previousExtremum.timeMs) <=
+    Math.abs(nextExtremum.timeMs - targetTimeMs)
+    ? previousExtremum
+    : nextExtremum;
+}
+
+function isFullSupermoonByExtrema(
+  fullMoonDistanceKm: number,
+  fullMoonTimeMs: number,
+  apogees: LunarDistanceExtremum[],
+  perigees: LunarDistanceExtremum[],
+): boolean {
+  const nearestApogee = findNearestExtremum(apogees, fullMoonTimeMs);
+  const nearestPerigee = findNearestExtremum(perigees, fullMoonTimeMs);
+
+  if (!nearestApogee || !nearestPerigee) {
+    return false;
+  }
+
+  const apogeeToPerigeeDistanceKm =
+    nearestApogee.distanceKm - nearestPerigee.distanceKm;
+
+  if (apogeeToPerigeeDistanceKm <= 0) {
+    return false;
+  }
+
+  const fullMoonRelativeDistance =
+    (nearestApogee.distanceKm - fullMoonDistanceKm) / apogeeToPerigeeDistanceKm;
+
+  return fullMoonRelativeDistance >= FULL_SUPERMOON_THRESHOLD;
 }
 
 function refinePhaseEventTimeMs(
@@ -446,7 +504,8 @@ function buildMoonPhaseEvents(
   rangeEndTimeMs: number,
   getLongitudeSeparationRadians: (timeMs: number) => number,
   getDistanceKm: (timeMs: number) => number,
-  nolleThresholds: Map<number, number>,
+  apogees: LunarDistanceExtremum[],
+  perigees: LunarDistanceExtremum[],
 ): MoonPhaseEvent[] {
   const phaseNames: MoonPhaseName[] = [
     "new",
@@ -495,12 +554,9 @@ function buildMoonPhaseEvents(
           getLongitudeSeparationRadians,
         );
         const distanceKm = getDistanceKm(eventTimeMs);
-        const eventYear = new Date(eventTimeMs).getUTCFullYear();
-        const nolleThreshold = nolleThresholds.get(eventYear);
         const isSupermoon =
-          (phase === "new" || phase === "full") &&
-          nolleThreshold !== undefined &&
-          distanceKm <= nolleThreshold;
+          phase === "full" &&
+          isFullSupermoonByExtrema(distanceKm, eventTimeMs, apogees, perigees);
 
         phaseEvents.push({
           phase,
@@ -692,17 +748,20 @@ async function buildMoonDistanceSeriesReply(
       distanceKm: getDistanceKm(sampleTimeMs),
     });
   }
-  const nolleThresholds = buildNolleThresholds(
-    rangeStartTimeMs,
-    rangeEndTimeMs,
+  const distanceExtrema = buildLunarDistanceExtrema(
+    rangeStartTimeMs - DISTANCE_EXTREMA_SEARCH_PADDING_MS,
+    rangeEndTimeMs + DISTANCE_EXTREMA_SEARCH_PADDING_MS,
     getDistanceKm,
   );
+  const apogees = distanceExtrema.filter((extremum) => extremum.kind === "apogee");
+  const perigees = distanceExtrema.filter((extremum) => extremum.kind === "perigee");
   const phaseEvents = buildMoonPhaseEvents(
     rangeStartTimeMs,
     rangeEndTimeMs,
     getLongitudeSeparationRadians,
     getDistanceKm,
-    nolleThresholds,
+    apogees,
+    perigees,
   );
 
   return {
