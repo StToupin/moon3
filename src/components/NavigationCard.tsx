@@ -28,6 +28,28 @@ export interface NavigationCardProps {
   totalSteps: number;
 }
 
+interface TimelineArrowIconProps {
+  direction: "left" | "right";
+}
+
+function TimelineArrowIcon({ direction }: TimelineArrowIconProps) {
+  return (
+    <svg
+      aria-hidden="true"
+      className="timeline-button__glyph"
+      viewBox="0 0 12 12"
+    >
+      <path
+        d={
+          direction === "left"
+            ? "M7.75 2.25 4 6l3.75 3.75"
+            : "M4.25 2.25 8 6l-3.75 3.75"
+        }
+      />
+    </svg>
+  );
+}
+
 export function NavigationCard({
   cameraStateTestId,
   className,
@@ -60,6 +82,10 @@ export function NavigationCard({
   const timelineClassName = ["hud-card", "hud-card--timeline", className]
     .filter(Boolean)
     .join(" ");
+  const timelineDateLabel =
+    dayOffset === 0
+      ? displayDate
+      : `${displayDate} ${dayOffset > 0 ? "+" : ""}${dayOffset} days`;
 
   return (
     <div className={timelineClassName}>
@@ -68,13 +94,15 @@ export function NavigationCard({
           <p className="timeline-view-indicator" data-testid={cameraStateTestId}>
             {currentCameraLabel.toUpperCase()} ({currentStep}/{totalSteps})
           </p>
-          <strong>{displayDate}</strong>
-          {dayOffset !== 0 && (
-            <span className="timeline-offset">
-              {dayOffset > 0 ? "+" : ""}
-              {dayOffset} days
-            </span>
-          )}
+          <strong className="timeline-date-row" title={timelineDateLabel}>
+            {displayDate}
+            {dayOffset !== 0 && (
+              <span className="timeline-offset">
+                {dayOffset > 0 ? "+" : ""}
+                {dayOffset} days
+              </span>
+            )}
+          </strong>
         </div>
         {isCollapsible && onToggleCollapse && (
           <button
@@ -119,7 +147,7 @@ export function NavigationCard({
                 type="button"
               >
                 <span aria-hidden="true" className="timeline-button__icon">
-                  ←
+                  <TimelineArrowIcon direction="left" />
                 </span>
                 <span aria-hidden="true" className="timeline-button__label">
                   Back
@@ -136,7 +164,7 @@ export function NavigationCard({
                   Next
                 </span>
                 <span aria-hidden="true" className="timeline-button__icon">
-                  →
+                  <TimelineArrowIcon direction="right" />
                 </span>
               </button>
             </div>
@@ -176,7 +204,7 @@ export function NavigationCard({
           type="button"
         >
           <span aria-hidden="true" className="timeline-button__icon">
-            ←
+            <TimelineArrowIcon direction="left" />
           </span>
         </button>
         <input
@@ -197,7 +225,7 @@ export function NavigationCard({
           type="button"
         >
           <span aria-hidden="true" className="timeline-button__icon">
-            →
+            <TimelineArrowIcon direction="right" />
           </span>
         </button>
 

@@ -1,6 +1,8 @@
-import { Suspense } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { SolarSystemView, type CameraStateName } from "./SolarSystemView";
 import type { Cameras, SolarSystem } from "./types";
+
+const SCENE_LOADING_OVERLAY_DELAY_MS = 180;
 
 interface SolarSystemSceneData {
   cameras: Cameras;
@@ -14,6 +16,29 @@ interface SceneStageProps {
   isLoadingEphemeris: boolean;
   isLoadingOrbits: boolean;
   solarSystemData: SolarSystemSceneData | null;
+}
+
+function DelayedSceneFallback() {
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setIsVisible(true);
+    }, SCENE_LOADING_OVERLAY_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  if (!isVisible) {
+    return null;
+  }
+
+  return (
+    <div className="loading-overlay">
+      <div className="loader"></div>
+      <span>Loading 3D scene&hellip;</span>
+    </div>
+  );
 }
 
 export function SceneStage({
@@ -39,14 +64,7 @@ export function SceneStage({
       )}
 
       {solarSystemData && (
-        <Suspense
-          fallback={
-            <div className="loading-overlay">
-              <div className="loader"></div>
-              <span>Loading 3D scene&hellip;</span>
-            </div>
-          }
-        >
+        <Suspense fallback={<DelayedSceneFallback />}>
           <SolarSystemView
             cameras={solarSystemData.cameras}
             currentState={currentCameraState}

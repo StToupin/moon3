@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Line } from "@react-three/drei";
 import { useFrame, useLoader } from "@react-three/fiber";
-import { Matrix4, Quaternion, TextureLoader, Vector3 } from "three";
+import { Matrix4, Quaternion, Texture, TextureLoader, Vector3 } from "three";
 import * as THREE from "three";
 import type { SolarSystem } from "./types";
 import { withBase } from "../basePath";
@@ -62,15 +62,13 @@ function lerpArray(
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 }
 
-function SunTexturedMaterial() {
-  const sunColorTexture = useLoader(TextureLoader, SUN_TEXTURE_URL);
-
+function SunTexturedMaterial({ texture }: { texture: Texture }) {
   return (
     <meshStandardMaterial
       emissive="#ffffff"
       emissiveIntensity={2}
-      emissiveMap={sunColorTexture}
-      map={sunColorTexture}
+      emissiveMap={texture}
+      map={texture}
       roughness={1}
       toneMapped={false}
     />
@@ -88,10 +86,8 @@ function SunPlainMaterial() {
   );
 }
 
-function EarthTexturedMaterial() {
-  const earthColorTexture = useLoader(TextureLoader, EARTH_TEXTURE_URL);
-
-  return <meshStandardMaterial map={earthColorTexture} roughness={1} />;
+function EarthTexturedMaterial({ texture }: { texture: Texture }) {
+  return <meshStandardMaterial map={texture} roughness={1} />;
 }
 
 function EarthPlainMaterial() {
@@ -106,8 +102,17 @@ export function Bodies({
   showSunTexture = false,
   showOrbits = true,
 }: BodiesProps) {
-  const moonColorTexture = useLoader(TextureLoader, MOON_TEXTURE_URL);
-  const moonElevationTexture = useLoader(TextureLoader, MOON_ELEVATION_URL);
+  const [
+    sunColorTexture,
+    earthColorTexture,
+    moonColorTexture,
+    moonElevationTexture,
+  ] = useLoader(TextureLoader, [
+    SUN_TEXTURE_URL,
+    EARTH_TEXTURE_URL,
+    MOON_TEXTURE_URL,
+    MOON_ELEVATION_URL,
+  ]);
 
   const animationProgress = useRef(schematicMode ? 1 : 0);
   const targetProgress = schematicMode ? 1 : 0;
@@ -267,7 +272,11 @@ export function Bodies({
         scale={states.normal.sunScale}
       >
         <sphereGeometry args={[1, 32, 16]} />
-        {showSunTexture ? <SunTexturedMaterial /> : <SunPlainMaterial />}
+        {showSunTexture ? (
+          <SunTexturedMaterial texture={sunColorTexture} />
+        ) : (
+          <SunPlainMaterial />
+        )}
       </mesh>
 
       {!hideEarth && (
@@ -280,7 +289,7 @@ export function Bodies({
           >
             <sphereGeometry args={[1, 64, 64]} />
             {showEarthTexture ? (
-              <EarthTexturedMaterial />
+              <EarthTexturedMaterial texture={earthColorTexture} />
             ) : (
               <EarthPlainMaterial />
             )}

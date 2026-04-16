@@ -385,10 +385,24 @@ export default function App() {
   const currentCameraLabel = formatCameraStateLabel(currentCameraState);
   const currentStep = currentCameraIndex + 1;
   const handlePreviousCamera = useCallback(() => {
-    setCurrentCameraState(CAMERA_STATE_ORDER[currentCameraIndex - 1]);
+    const previousCameraState = CAMERA_STATE_ORDER[currentCameraIndex - 1];
+    if (!previousCameraState) {
+      return;
+    }
+
+    startTransition(() => {
+      setCurrentCameraState(previousCameraState);
+    });
   }, [currentCameraIndex]);
   const handleNextCamera = useCallback(() => {
-    setCurrentCameraState(CAMERA_STATE_ORDER[currentCameraIndex + 1]);
+    const nextCameraState = CAMERA_STATE_ORDER[currentCameraIndex + 1];
+    if (!nextCameraState) {
+      return;
+    }
+
+    startTransition(() => {
+      setCurrentCameraState(nextCameraState);
+    });
   }, [currentCameraIndex]);
   const handleTogglePlayback = useCallback(() => {
     setIsPlaying((previous) => !previous);

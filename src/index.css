@@ -251,6 +251,9 @@ button {
   cursor: crosshair;
   display: block;
   height: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
   width: 100%;
 }
 
@@ -456,8 +459,21 @@ button {
 }
 
 .timeline-button__icon {
+  align-items: center;
+  display: inline-flex;
   font-size: 0.94rem;
+  justify-content: center;
   line-height: 1;
+}
+
+.timeline-button__glyph {
+  fill: none;
+  height: 0.96rem;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+  width: 0.96rem;
 }
 
 .timeline-button__label {
@@ -526,6 +542,9 @@ button {
 }
 
 .timeline-header__details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
   min-width: 0;
 }
 
@@ -534,9 +553,13 @@ button {
   margin-bottom: 0.65rem;
 }
 
-.timeline-header strong {
-  display: inline-block;
+.timeline-date-row {
+  display: block;
   font-size: 0.96rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .timeline-toolbar {
@@ -549,7 +572,6 @@ button {
 
 .timeline-offset {
   color: var(--text-muted);
-  display: inline-block;
   margin-left: 0.45rem;
 }
 
@@ -785,5 +807,17 @@ button {
 
   .timeline-scale {
     font-size: 0.64rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-navigation-card--mobile .timeline-controls--primary .timeline-button {
+    aspect-ratio: 1 / 1;
+    min-width: 2.4rem;
+    padding: 0;
+  }
+
+  .app-navigation-card--mobile .timeline-controls--primary .timeline-button__label {
+    display: none;
   }
 }

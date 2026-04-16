@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type {
   MoonDistanceSeriesReply,
   MoonPhaseEvent,
@@ -56,6 +56,13 @@ interface PhaseHoverState {
 }
 
 type HoverState = SampleHoverState | PhaseHoverState;
+
+interface PhaseMarker {
+  index: number;
+  phaseEvent: MoonPhaseEvent;
+  x: number;
+  y: number;
+}
 
 function formatDistance(distanceKm: number): string {
   return `${wholeNumberFormatter.format(distanceKm)} km`;
@@ -168,6 +175,7 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
   const gradientId = `${idBase}-fill`;
   const plotClipId = `${idBase}-plot-clip`;
   const [hoverState, setHoverState] = useState<HoverState | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
   const { samples } = series;
 
   if (samples.length === 0) {
@@ -224,7 +232,7 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
   const rangeStartTimeMs = Date.parse(samples[0].timestamp);
   const rangeEndTimeMs = Date.parse(samples[samples.length - 1].timestamp);
   const rangeDurationMs = Math.max(rangeEndTimeMs - rangeStartTimeMs, 1);
-  const phaseMarkers = series.phaseEvents.map(
+  const phaseMarkers: PhaseMarker[] = series.phaseEvents.map(
     (phaseEvent: MoonPhaseEvent, index) => {
       const timeMs = Date.parse(phaseEvent.timestamp);
       const fraction = clamp(
@@ -280,12 +288,46 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
       : null
     : null;
 
-  function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const anchorX = clamp(event.clientX - rect.left, 0, rect.width);
-    const anchorY = clamp(event.clientY - rect.top, 0, rect.height);
-    const plotLeft = (PADDING_LEFT / SVG_WIDTH) * rect.width;
-    const plotRight = ((SVG_WIDTH - PADDING_RIGHT) / SVG_WIDTH) * rect.width;
+  function resolveHoverState(
+    anchorX: number,
+    anchorY: number,
+    width: number,
+    height: number,
+  ): HoverState {
+    const chartPointerX = (anchorX / width) * SVG_WIDTH;
+    const chartPointerY = (anchorY / height) * SVG_HEIGHT;
+    let nearestPhaseMarker: PhaseMarker | null = null;
+    let nearestPhaseDistanceSq = Number.POSITIVE_INFINITY;
+
+    for (const marker of phaseMarkers) {
+      const hitRadius = marker.phaseEvent.isSupermoon
+        ? SUPERMOON_HIT_RADIUS
+        : PHASE_HIT_RADIUS;
+      const deltaX = chartPointerX - marker.x;
+      const deltaY = chartPointerY - marker.y;
+      const distanceSq = deltaX * deltaX + deltaY * deltaY;
+
+      if (distanceSq <= hitRadius * hitRadius && distanceSq < nearestPhaseDistanceSq) {
+        nearestPhaseMarker = marker;
+        nearestPhaseDistanceSq = distanceSq;
+      }
+    }
+
+    if (nearestPhaseMarker !== null) {
+      return {
+        kind: "phase",
+        phaseEventIndex: nearestPhaseMarker.index,
+        anchorX: clamp((nearestPhaseMarker.x / SVG_WIDTH) * width, 0, width),
+        anchorY: clamp((nearestPhaseMarker.y / SVG_HEIGHT) * height, 0, height),
+        chartX: nearestPhaseMarker.x,
+        chartY: nearestPhaseMarker.y,
+        width,
+        height,
+      };
+    }
+
+    const plotLeft = (PADDING_LEFT / SVG_WIDTH) * width;
+    const plotRight = ((SVG_WIDTH - PADDING_RIGHT) / SVG_WIDTH) * width;
     const plotWidthPx = Math.max(plotRight - plotLeft, 1);
     const plotCursorX = clamp(anchorX, plotLeft, plotRight);
     const fraction = clamp((plotCursorX - plotLeft) / plotWidthPx, 0, 1);
@@ -296,27 +338,83 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
     const interpolationProgress = exactIndex - lowerIndex;
     const lowerPoint = points[lowerIndex] ?? points[0];
     const upperPoint = points[upperIndex] ?? points[lastIndex];
-    const chartX = PADDING_LEFT + fraction * plotWidth;
-    const chartY = interpolate(
-      lowerPoint.y,
-      upperPoint.y,
-      interpolationProgress,
-    );
 
-    setHoverState({
+    return {
       kind: "sample",
       pointIndex,
       anchorX,
       anchorY,
-      chartX,
-      chartY,
+      chartX: PADDING_LEFT + fraction * plotWidth,
+      chartY: interpolate(
+        lowerPoint.y,
+        upperPoint.y,
+        interpolationProgress,
+      ),
+      width,
+      height,
+    };
+  }
+
+  function updateHoverState(event: React.PointerEvent<SVGSVGElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const anchorX = clamp(event.clientX - rect.left, 0, rect.width);
+    const anchorY = clamp(event.clientY - rect.top, 0, rect.height);
+
+    setHoverState(resolveHoverState(anchorX, anchorY, rect.width, rect.height));
+  }
+
+  function handlePointerDown(event: React.PointerEvent<SVGSVGElement>) {
+    if (event.pointerType !== "mouse") {
+      event.preventDefault();
+      activePointerIdRef.current = event.pointerId;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+
+    updateHoverState(event);
+  }
+
+  function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
+    updateHoverState(event);
+  }
+
+  function handlePointerLeave(event: React.PointerEvent<SVGSVGElement>) {
+    if (event.pointerType === "mouse") {
+      setHoverState(null);
+    }
+  }
+
+  function handlePointerRelease(event: React.PointerEvent<SVGSVGElement>) {
+    if (activePointerIdRef.current === event.pointerId) {
+      activePointerIdRef.current = null;
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+      setHoverState(null);
+    }
+  }
+
+  function createPhaseHoverState(phaseEventIndex: number, svg: SVGSVGElement) {
+    const rect = svg.getBoundingClientRect();
+    const marker = phaseMarkers[phaseEventIndex];
+
+    return {
+      kind: "phase" as const,
+      phaseEventIndex,
+      anchorX: clamp((marker.x / SVG_WIDTH) * rect.width, 0, rect.width),
+      anchorY: clamp((marker.y / SVG_HEIGHT) * rect.height, 0, rect.height),
+      chartX: marker.x,
+      chartY: marker.y,
       width: rect.width,
       height: rect.height,
-    });
+    };
   }
 
   function createPhaseHoverHandler(phaseEventIndex: number) {
     return (event: React.PointerEvent<SVGCircleElement>) => {
+      if (event.pointerType !== "mouse") {
+        return;
+      }
+
       event.stopPropagation();
 
       const svg = event.currentTarget.ownerSVGElement;
@@ -324,19 +422,7 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
         return;
       }
 
-      const rect = svg.getBoundingClientRect();
-      const marker = phaseMarkers[phaseEventIndex];
-
-      setHoverState({
-        kind: "phase",
-        phaseEventIndex,
-        anchorX: clamp((marker.x / SVG_WIDTH) * rect.width, 0, rect.width),
-        anchorY: clamp((marker.y / SVG_HEIGHT) * rect.height, 0, rect.height),
-        chartX: marker.x,
-        chartY: marker.y,
-        width: rect.width,
-        height: rect.height,
-      });
+      setHoverState(createPhaseHoverState(phaseEventIndex, svg));
     };
   }
 
@@ -347,8 +433,11 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
           aria-labelledby={`${titleId} ${descriptionId}`}
           className="moon-distance-chart"
           data-testid="moon-distance-chart"
-          onPointerLeave={() => setHoverState(null)}
+          onPointerCancel={handlePointerRelease}
+          onPointerDown={handlePointerDown}
+          onPointerLeave={handlePointerLeave}
           onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerRelease}
           role="img"
           viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
         >
