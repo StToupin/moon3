@@ -1,10 +1,13 @@
 import {
   getEphemeris as getEphemerisFromWasm,
+  getMoonDistanceSeries as getMoonDistanceSeriesFromWasm,
   getOrbits as getOrbitsFromWasm,
   getSpiceDiagnostics as getSpiceDiagnosticsFromWasm,
   type BodyData,
   type CameraPosition,
   type EphemerisReply,
+  type MoonDistanceSample,
+  type MoonDistanceSeriesReply,
   type OrbitData,
   type OrbitsReply,
 } from "../spice/ephemerisService";
@@ -14,6 +17,8 @@ export type {
   BodyData,
   CameraPosition,
   EphemerisReply,
+  MoonDistanceSample,
+  MoonDistanceSeriesReply,
   OrbitData,
   OrbitsReply,
   SpiceDiagnostics,
@@ -31,6 +36,12 @@ export async function getOrbits(request: {
   date: string;
 }): Promise<OrbitsReply> {
   return getOrbitsFromWasm(request);
+}
+
+export async function getMoonDistanceSeries(request: {
+  date: string;
+}): Promise<MoonDistanceSeriesReply> {
+  return getMoonDistanceSeriesFromWasm(request);
 }
 
 export async function getSpiceDiagnostics(): Promise<SpiceDiagnostics> {

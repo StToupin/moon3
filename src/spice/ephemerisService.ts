@@ -26,6 +26,8 @@ const AU_KM = 149597870.7;
 const MOON_ORBITAL_PERIOD_SECONDS = 27.32 * 24 * 60 * 60;
 const EARTH_ORBITAL_PERIOD_SECONDS = 365.25 * 24 * 60 * 60;
 const ORBIT_STEPS = 360;
+const DISTANCE_SERIES_DAY_RANGE = 365;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 type BodyName = "SUN" | "EARTH" | "MOON";
 
@@ -72,6 +74,17 @@ export interface OrbitsReply {
   orbits: OrbitData[];
 }
 
+export interface MoonDistanceSample {
+  dayOffset: number;
+  timestamp: string;
+  distanceKm: number;
+}
+
+export interface MoonDistanceSeriesReply {
+  referenceTimestamp: string;
+  samples: MoonDistanceSample[];
+}
+
 const BODY_INFOS: Record<BodyName, BodyInfo> = {
   SUN: { id: SUN_ID, frame: SUN_FRAME, name: "SUN" },
   EARTH: { id: EARTH_ID, frame: EARTH_FRAME, name: "EARTH" },
@@ -79,6 +92,7 @@ const BODY_INFOS: Record<BodyName, BodyInfo> = {
 };
 
 const orbitCache = new Map<string, Promise<OrbitsReply>>();
+const moonDistanceCache = new Map<string, Promise<MoonDistanceSeriesReply>>();
 
 function parseDate(dateString: string): Date {
   const parsedDate = new Date(dateString);
@@ -115,6 +129,10 @@ function vectorAdd(a: Vector3Tuple, b: Vector3Tuple): Vector3Tuple {
 
 function vectorSub(a: Vector3Tuple, b: Vector3Tuple): Vector3Tuple {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function vectorLength(vector: Vector3Tuple): number {
+  return Math.hypot(vector[0], vector[1], vector[2]);
 }
 
 function mxv(matrix: Matrix3, vector: Vector3Tuple): Vector3Tuple {
@@ -335,6 +353,58 @@ export async function getOrbits(request: {
 
   orbitCache.set(cacheKey, orbitPromise);
   return orbitPromise;
+}
+
+async function buildMoonDistanceSeriesReply(
+  date: Date,
+): Promise<MoonDistanceSeriesReply> {
+  const runtime = await getSpiceRuntime();
+  const samples = Array.from(
+    { length: DISTANCE_SERIES_DAY_RANGE * 2 + 1 },
+    (_, index) => {
+      const dayOffset = index - DISTANCE_SERIES_DAY_RANGE;
+      const sampleDate = new Date(date.getTime() + dayOffset * DAY_MS);
+      const et = str2et(runtime, formatSpiceTime(sampleDate));
+      const moonPositionRelativeToEarth = spkez(
+        runtime,
+        MOON_ID,
+        et,
+        REFERENCE_FRAME,
+        EARTH_ID,
+      ).positionKm;
+
+      return {
+        dayOffset,
+        timestamp: sampleDate.toISOString(),
+        distanceKm: vectorLength(moonPositionRelativeToEarth),
+      };
+    },
+  );
+
+  return {
+    referenceTimestamp: date.toISOString(),
+    samples,
+  };
+}
+
+export async function getMoonDistanceSeries(request: {
+  date: string;
+}): Promise<MoonDistanceSeriesReply> {
+  const date = parseDate(request.date);
+  const cacheKey = date.toISOString();
+
+  const cached = moonDistanceCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const moonDistancePromise = buildMoonDistanceSeriesReply(date).catch((error) => {
+    moonDistanceCache.delete(cacheKey);
+    throw error;
+  });
+
+  moonDistanceCache.set(cacheKey, moonDistancePromise);
+  return moonDistancePromise;
 }
 
 export async function getSpiceDiagnostics(): Promise<SpiceDiagnostics> {

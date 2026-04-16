@@ -15,12 +15,12 @@ test("recreates the ephemeris app with kernel-backed CSPICE execution in the bro
   await page.goto(`/?date=${encodeURIComponent(FIXED_DATE)}`);
 
   await expect(page).toHaveTitle("Moon");
-  await expect(page.getByTestId("camera-state")).toHaveText("MOON (5/5)", {
+  await expect(page.getByTestId("camera-state")).toHaveText("MOON (4/5)", {
     timeout: 120_000,
   });
-  await expect(page).toHaveURL(/step=5\b/);
+  await expect(page).toHaveURL(/step=4\b/);
   await expect(page.getByRole("button", { name: "Previous" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Next" })).toBeEnabled();
   await expect(page.locator('link[rel="icon"][type="image/x-icon"]')).toHaveAttribute(
     "href",
     "/favicon.ico?v=3",
@@ -141,4 +141,83 @@ test("persists the step query param and only requests textures for the matching 
   await expect(page).toHaveURL(/step=1\b/);
   await expect.poll(() => requestedAssets.has("/earth-texture.jpg")).toBe(true);
   await expect.poll(() => requestedAssets.has("/sun-texture.jpg")).toBe(true);
+});
+
+test("opens and closes the moon distance tab and renders the SVG chart", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({
+    latitude: 48.8566,
+    longitude: 2.3522,
+  });
+
+  await page.goto(`/?date=${encodeURIComponent(FIXED_DATE)}`);
+
+  const moonDistanceTab = page.getByRole("button", {
+    name: "Moon Distance",
+    exact: true,
+  });
+  const moonDistancePanel = page.getByRole("region", { name: "Moon Distance" });
+
+  await moonDistanceTab.click();
+
+  await expect(moonDistancePanel).toBeVisible();
+  await expect(moonDistancePanel.getByTestId("moon-distance-chart")).toBeVisible({
+    timeout: 120_000,
+  });
+  await expect(moonDistancePanel.getByTestId("moon-distance-range")).toHaveText(
+    /731 daily samples/,
+  );
+  await expect(moonDistancePanel.getByTestId("moon-distance-current")).toContainText(
+    "km",
+  );
+
+  await moonDistancePanel.getByTestId("moon-distance-chart").hover({
+    position: { x: 420, y: 140 },
+  });
+  await expect(moonDistancePanel.getByTestId("moon-distance-tooltip")).toBeVisible();
+  await expect(moonDistancePanel.getByTestId("moon-distance-tooltip")).toContainText(
+    "km",
+  );
+  const chartBox = await moonDistancePanel
+    .getByTestId("moon-distance-chart")
+    .boundingBox();
+  const hoverMarkerBox = await moonDistancePanel
+    .getByTestId("moon-distance-hover-marker")
+    .boundingBox();
+  if (!chartBox || !hoverMarkerBox) {
+    throw new Error("Unable to measure chart hover layout");
+  }
+  const hoveredCursorX = chartBox.x + 420;
+  const hoverMarkerCenterX = hoverMarkerBox.x + hoverMarkerBox.width / 2;
+  expect(Math.abs(hoverMarkerCenterX - hoveredCursorX)).toBeLessThan(16);
+
+  await moonDistancePanel.getByTestId("moon-distance-current-hit-area").hover();
+  await expect(moonDistancePanel.getByTestId("moon-distance-tooltip")).toContainText(
+    "Current",
+  );
+  const currentHitAreaBox = await moonDistancePanel
+    .getByTestId("moon-distance-current-hit-area")
+    .boundingBox();
+  const specialTooltipBox = await moonDistancePanel
+    .getByTestId("moon-distance-tooltip")
+    .boundingBox();
+  if (!currentHitAreaBox || !specialTooltipBox) {
+    throw new Error("Unable to measure special tooltip layout");
+  }
+  const currentHitAreaCenterY = currentHitAreaBox.y + currentHitAreaBox.height / 2;
+  expect(specialTooltipBox.y + specialTooltipBox.height).toBeLessThan(
+    currentHitAreaCenterY,
+  );
+
+  await page.getByRole("button", { name: "Close moon distance tab" }).click();
+  await expect(page.getByRole("region", { name: "Moon Distance" })).toHaveCount(0);
+
+  await moonDistanceTab.click();
+  await expect(moonDistancePanel.getByTestId("moon-distance-chart")).toBeVisible();
+
+  await moonDistanceTab.click();
+  await expect(page.getByRole("region", { name: "Moon Distance" })).toHaveCount(0);
 });

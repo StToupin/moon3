@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { getBody, unflattenMatrix, unflattenOrbit } from "./api/ephemeris";
+import { MoonDistanceChart } from "./components/MoonDistanceChart";
 import {
   CAMERA_STATE_ORDER,
   formatCameraStateLabel,
@@ -15,15 +16,25 @@ import {
   type CameraStateName,
 } from "./components/SolarSystemView";
 import type { Cameras, OrbitsData, SolarSystem } from "./components/types";
-import { useEphemeris, useOrbits, useSpiceDiagnostics } from "./hooks/useEphemeris";
+import {
+  useEphemeris,
+  useMoonDistanceSeries,
+  useOrbits,
+  useSpiceDiagnostics,
+} from "./hooks/useEphemeris";
 import { useGeolocation } from "./hooks/useGeolocation";
 
 const MIN_DAY_OFFSET = -365;
 const MAX_DAY_OFFSET = 365;
 const PLAYBACK_INTERVAL_MS = 100;
 const PLAYBACK_STEP_DAYS = 1;
-const DEFAULT_CAMERA_STATE: CameraStateName = "moon";
+const DEFAULT_CAMERA_STEP = 4;
+const DEFAULT_CAMERA_STATE: CameraStateName =
+  CAMERA_STATE_ORDER[DEFAULT_CAMERA_STEP - 1] ?? "moon";
 const STEP_SEARCH_PARAM = "step";
+const MOON_DISTANCE_TAB_ID = "moon_distance";
+
+type TopBarTabId = typeof MOON_DISTANCE_TAB_ID;
 
 declare global {
   interface Window {
@@ -47,6 +58,7 @@ function getCameraStateFromStep(stepParam: string | null): CameraStateName | nul
 export default function App() {
   const [dayOffset, setDayOffset] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [activeTab, setActiveTab] = useState<TopBarTabId | null>(null);
   const [currentCameraState, setCurrentCameraState] =
     useState<CameraStateName>(() => {
       const stepParam = new URLSearchParams(window.location.search).get(
@@ -122,6 +134,11 @@ export default function App() {
     () => ({ date: deferredIsoDate }),
     [deferredIsoDate],
   );
+  const moonDistanceRequest = useMemo(
+    () => ({ date: deferredIsoDate }),
+    [deferredIsoDate],
+  );
+  const isMoonDistanceTabOpen = activeTab === MOON_DISTANCE_TAB_ID;
 
   const {
     data,
@@ -133,6 +150,14 @@ export default function App() {
     error: orbitsError,
     isLoading: isLoadingOrbits,
   } = useOrbits(orbitsRequest);
+  const {
+    data: moonDistanceSeries,
+    error: moonDistanceError,
+    isFetching: isFetchingMoonDistance,
+    isLoading: isLoadingMoonDistance,
+  } = useMoonDistanceSeries(moonDistanceRequest, {
+    enabled: isMoonDistanceTabOpen,
+  });
   const { data: diagnostics } = useSpiceDiagnostics();
 
   const combinedError = ephemerisError ?? orbitsError;
@@ -269,6 +294,16 @@ export default function App() {
     },
     [],
   );
+  const handleMoonDistanceTabToggle = useCallback(() => {
+    setActiveTab((previous) =>
+      previous === MOON_DISTANCE_TAB_ID ? null : MOON_DISTANCE_TAB_ID,
+    );
+  }, []);
+  const handleCloseMoonDistanceTab = useCallback(() => {
+    setActiveTab((previous) =>
+      previous === MOON_DISTANCE_TAB_ID ? null : previous,
+    );
+  }, []);
 
   const currentCameraIndex = CAMERA_STATE_ORDER.indexOf(currentCameraState);
   const currentCameraLabel = formatCameraStateLabel(currentCameraState);
@@ -293,6 +328,77 @@ export default function App() {
   return (
     <main className="ephemeris-page">
       <div className="solar-system-container">
+        <div className="top-panel-stack">
+          <div className="hud-card hud-card--tabs">
+            <div aria-label="Top tabs" className="tab-strip">
+              <button
+                aria-controls="moon-distance-panel"
+                aria-expanded={isMoonDistanceTabOpen}
+                aria-pressed={isMoonDistanceTabOpen}
+                className={`top-tab ${isMoonDistanceTabOpen ? "top-tab--active" : ""}`}
+                onClick={handleMoonDistanceTabToggle}
+                type="button"
+              >
+                Moon Distance
+              </button>
+            </div>
+          </div>
+
+          {isMoonDistanceTabOpen && (
+            <section
+              aria-label="Moon Distance"
+              className="hud-card tab-panel"
+              id="moon-distance-panel"
+              role="region"
+            >
+              <div className="tab-panel__header">
+                <div className="tab-panel__heading">
+                  <span className="hud-label">Analysis</span>
+                  <h2>Moon Distance</h2>
+                  <p>
+                    Daily Earth-Moon center distance from one year before to one
+                    year after the selected date.
+                  </p>
+                </div>
+
+                <div className="tab-panel__actions">
+                  {isFetchingMoonDistance && moonDistanceSeries && (
+                    <span className="tab-panel__status">Updating...</span>
+                  )}
+                  <button
+                    aria-label="Close moon distance tab"
+                    className="tab-close-button"
+                    onClick={handleCloseMoonDistanceTab}
+                    type="button"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+
+              {moonDistanceError && (
+                <div
+                  className="tab-panel__message tab-panel__message--error"
+                  role="alert"
+                >
+                  Error: {moonDistanceError.message}
+                </div>
+              )}
+
+              {isLoadingMoonDistance && !moonDistanceSeries && (
+                <div className="tab-panel__message">
+                  <div className="loader tab-panel__loader"></div>
+                  <span>Computing daily Earth-Moon distances&hellip;</span>
+                </div>
+              )}
+
+              {moonDistanceSeries && (
+                <MoonDistanceChart series={moonDistanceSeries} />
+              )}
+            </section>
+          )}
+        </div>
+
         <div className="scene-stage">
           {combinedError && (
             <div className="error-overlay" role="alert">

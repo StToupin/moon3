@@ -93,6 +93,303 @@ button {
   text-transform: uppercase;
 }
 
+.top-panel-stack {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  left: 20px;
+  pointer-events: none;
+  position: absolute;
+  right: 20px;
+  top: 20px;
+  z-index: 25;
+}
+
+.top-panel-stack .hud-card {
+  pointer-events: auto;
+  position: relative;
+}
+
+.hud-card--tabs {
+  padding: 0.35rem;
+}
+
+.tab-strip {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.top-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding: 0.72rem 1.1rem;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.top-tab:hover {
+  border-color: rgba(120, 215, 255, 0.2);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.top-tab--active {
+  background: linear-gradient(135deg, rgba(120, 215, 255, 0.18), rgba(255, 215, 106, 0.16));
+  border-color: rgba(120, 215, 255, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.tab-panel {
+  max-height: calc(100vh - 120px);
+  max-width: min(880px, calc(100vw - 40px));
+  overflow: auto;
+  padding: 1rem 1.1rem 1.15rem;
+  width: min(880px, calc(100vw - 40px));
+}
+
+.tab-panel__header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.tab-panel__heading h2 {
+  font-size: 1.16rem;
+  margin-top: 0.28rem;
+}
+
+.tab-panel__heading p {
+  color: var(--text-secondary);
+  margin-top: 0.35rem;
+  max-width: 60ch;
+}
+
+.tab-panel__actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.75rem;
+}
+
+.tab-panel__status {
+  color: var(--accent-sky);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tab-close-button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 0.62rem 1rem;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.tab-close-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.24);
+  transform: translateY(-1px);
+}
+
+.tab-panel__message {
+  align-items: center;
+  color: var(--text-secondary);
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+  min-height: 180px;
+  text-align: center;
+}
+
+.tab-panel__message--error {
+  color: var(--accent-error);
+}
+
+.tab-panel__loader {
+  border-width: 2px;
+  height: 28px;
+  width: 28px;
+}
+
+.moon-distance-chart-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.moon-distance-stats {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.moon-distance-stat {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+}
+
+.moon-distance-stat strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-top: 0.35rem;
+}
+
+.moon-distance-stat small {
+  color: var(--text-secondary);
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.moon-distance-range {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+.moon-distance-chart {
+  cursor: crosshair;
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.moon-distance-chart-frame {
+  position: relative;
+}
+
+.moon-distance-chart__backdrop {
+  fill: rgba(255, 255, 255, 0.03);
+  stroke: rgba(255, 255, 255, 0.08);
+}
+
+.moon-distance-chart__grid {
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 1;
+}
+
+.moon-distance-chart__grid--vertical {
+  stroke-dasharray: 4 8;
+}
+
+.moon-distance-chart__axis-label {
+  fill: var(--text-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.moon-distance-chart__current-line {
+  stroke: rgba(255, 215, 106, 0.55);
+  stroke-dasharray: 6 8;
+  stroke-width: 1.5;
+}
+
+.moon-distance-chart__hover-line {
+  stroke: rgba(255, 255, 255, 0.48);
+  stroke-dasharray: 3 6;
+  stroke-width: 1.25;
+}
+
+.moon-distance-chart__line {
+  fill: none;
+  stroke: var(--accent-sky);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.moon-distance-chart__marker {
+  fill: var(--accent-gold);
+  stroke: rgba(3, 8, 15, 0.9);
+  stroke-width: 2;
+}
+
+.moon-distance-chart__marker--current {
+  fill: var(--accent-sky);
+}
+
+.moon-distance-chart__hover-marker {
+  fill: #fff;
+  stroke: rgba(7, 16, 28, 0.96);
+  stroke-width: 2.5;
+}
+
+.moon-distance-chart__special-hit-area {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.moon-distance-tooltip {
+  backdrop-filter: blur(18px);
+  background: rgba(5, 10, 18, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+  left: 0;
+  max-width: 220px;
+  min-width: 170px;
+  padding: 0.7rem 0.8rem;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  z-index: 2;
+}
+
+.moon-distance-tooltip--above {
+  transform: translate(-50%, calc(-100% - 14px));
+}
+
+.moon-distance-tooltip--below {
+  transform: translate(-50%, 14px);
+}
+
+.moon-distance-tooltip__eyebrow {
+  color: var(--accent-gold);
+  display: block;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+}
+
+.moon-distance-tooltip strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.moon-distance-tooltip span {
+  color: var(--accent-sky);
+  display: block;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.82rem;
+  margin-top: 0.25rem;
+}
+
+.moon-distance-tooltip small {
+  color: var(--text-secondary);
+  display: block;
+  margin-top: 0.18rem;
+}
+
 .loading-overlay,
 .error-overlay {
   align-items: center;
@@ -244,8 +541,48 @@ button {
     grid-template-rows: minmax(0, 1fr) auto;
   }
 
+  .top-panel-stack {
+    gap: 10px;
+    left: 12px;
+    right: 12px;
+    top: 12px;
+  }
+
   .scene-stage {
     min-height: 0;
+  }
+
+  .hud-card--tabs,
+  .tab-panel {
+    max-width: none;
+    width: 100%;
+  }
+
+  .tab-strip {
+    width: 100%;
+  }
+
+  .top-tab {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  .tab-panel {
+    max-height: min(62vh, 480px);
+    padding: 0.95rem 1rem 1rem;
+  }
+
+  .tab-panel__header {
+    flex-direction: column;
+  }
+
+  .tab-panel__actions {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .moon-distance-stats {
+    grid-template-columns: 1fr;
   }
 
   .hud-card--timeline {
