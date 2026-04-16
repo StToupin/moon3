@@ -164,7 +164,9 @@ function renderPhaseIcon(phase: MoonPhaseName) {
 export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
   const titleId = useId();
   const descriptionId = useId();
-  const gradientId = `${titleId.replace(/:/g, "")}-fill`;
+  const idBase = titleId.replace(/:/g, "");
+  const gradientId = `${idBase}-fill`;
+  const plotClipId = `${idBase}-plot-clip`;
   const [hoverState, setHoverState] = useState<HoverState | null>(null);
   const { samples } = series;
 
@@ -361,6 +363,15 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
               <stop offset="0%" stopColor="#78d7ff" stopOpacity="0.38" />
               <stop offset="100%" stopColor="#78d7ff" stopOpacity="0.02" />
             </linearGradient>
+            <clipPath id={plotClipId}>
+              <rect
+                height={plotHeight}
+                rx="18"
+                width={plotWidth}
+                x={PADDING_LEFT}
+                y={PADDING_TOP}
+              />
+            </clipPath>
           </defs>
 
           <rect
@@ -377,23 +388,15 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
             const y = PADDING_TOP + plotHeight - (index / 4) * plotHeight;
 
             return (
-              <g key={`y-${distance}`}>
-                <line
-                  className="moon-distance-chart__grid"
-                  x1={PADDING_LEFT}
-                  x2={PADDING_LEFT + plotWidth}
-                  y1={y}
-                  y2={y}
-                />
-                <text
-                  className="moon-distance-chart__axis-label"
-                  textAnchor="end"
-                  x={PADDING_LEFT - 10}
-                  y={y + 4}
-                >
-                  {formatCompactDistance(distance)}
-                </text>
-              </g>
+              <text
+                key={`y-label-${distance}`}
+                className="moon-distance-chart__axis-label"
+                textAnchor="end"
+                x={PADDING_LEFT - 10}
+                y={y + 4}
+              >
+                {formatCompactDistance(distance)}
+              </text>
             );
           })}
 
@@ -401,110 +404,135 @@ export function MoonDistanceChart({ series }: MoonDistanceChartProps) {
             const point = points[tickIndex];
 
             return (
-              <g key={`x-${tickIndex}`}>
+              <text
+                key={`x-label-${tickIndex}`}
+                className="moon-distance-chart__axis-label"
+                textAnchor={
+                  tickIndex === 0
+                    ? "start"
+                    : tickIndex === lastIndex
+                      ? "end"
+                      : "middle"
+                }
+                x={point.x}
+                y={SVG_HEIGHT - 12}
+              >
+                {axisDateFormatter.format(new Date(point.sample.timestamp))}
+              </text>
+            );
+          })}
+
+          <g clipPath={`url(#${plotClipId})`}>
+            {Array.from({ length: 5 }, (_, index) => {
+              const distance = minDistance + (index / 4) * yRange;
+              const y = PADDING_TOP + plotHeight - (index / 4) * plotHeight;
+
+              return (
                 <line
+                  key={`y-grid-${distance}`}
+                  className="moon-distance-chart__grid"
+                  x1={PADDING_LEFT}
+                  x2={PADDING_LEFT + plotWidth}
+                  y1={y}
+                  y2={y}
+                />
+              );
+            })}
+
+            {xTickIndexes.map((tickIndex) => {
+              const point = points[tickIndex];
+
+              return (
+                <line
+                  key={`x-grid-${tickIndex}`}
                   className="moon-distance-chart__grid moon-distance-chart__grid--vertical"
                   x1={point.x}
                   x2={point.x}
                   y1={PADDING_TOP}
                   y2={PADDING_TOP + plotHeight}
                 />
-                <text
-                  className="moon-distance-chart__axis-label"
-                  textAnchor={
-                    tickIndex === 0
-                      ? "start"
-                      : tickIndex === lastIndex
-                        ? "end"
-                        : "middle"
-                  }
-                  x={point.x}
-                  y={SVG_HEIGHT - 12}
-                >
-                  {axisDateFormatter.format(new Date(point.sample.timestamp))}
-                </text>
-              </g>
-            );
-          })}
+              );
+            })}
 
-          <path
-            className="moon-distance-chart__area"
-            d={areaPath}
-            fill={`url(#${gradientId})`}
-          />
-          <path className="moon-distance-chart__line" d={linePath} />
-          <line
-            className="moon-distance-chart__current-line"
-            data-testid="moon-distance-current-line"
-            x1={currentPoint.x}
-            x2={currentPoint.x}
-            y1={PADDING_TOP}
-            y2={PADDING_TOP + plotHeight}
-          />
+            <path
+              className="moon-distance-chart__area"
+              d={areaPath}
+              fill={`url(#${gradientId})`}
+            />
+            <path className="moon-distance-chart__line" d={linePath} />
+            <line
+              className="moon-distance-chart__current-line"
+              data-testid="moon-distance-current-line"
+              x1={currentPoint.x}
+              x2={currentPoint.x}
+              y1={PADDING_TOP}
+              y2={PADDING_TOP + plotHeight}
+            />
 
-          {phaseMarkers.map((marker) => (
-            <g
-              key={`phase-${marker.index}`}
-              data-testid={
-                marker.phaseEvent.isSupermoon
-                  ? "moon-phase-supermoon"
-                  : "moon-phase-event"
-              }
-            >
+            {phaseMarkers.map((marker) => (
               <g
-                className={`moon-distance-chart__phase-icon ${
+                key={`phase-${marker.index}`}
+                data-testid={
                   marker.phaseEvent.isSupermoon
-                    ? "moon-distance-chart__phase-icon--supermoon"
-                    : ""
-                }`}
-                transform={`translate(${marker.x} ${marker.y})`}
+                    ? "moon-phase-supermoon"
+                    : "moon-phase-event"
+                }
               >
-                {marker.phaseEvent.isSupermoon && (
-                  <circle
-                    className="moon-distance-chart__phase-halo"
-                    r={PHASE_ICON_RADIUS + 4}
-                  />
-                )}
-                {renderPhaseIcon(marker.phaseEvent.phase)}
+                <g
+                  className={`moon-distance-chart__phase-icon ${
+                    marker.phaseEvent.isSupermoon
+                      ? "moon-distance-chart__phase-icon--supermoon"
+                      : ""
+                  }`}
+                  transform={`translate(${marker.x} ${marker.y})`}
+                >
+                  {marker.phaseEvent.isSupermoon && (
+                    <circle
+                      className="moon-distance-chart__phase-halo"
+                      r={PHASE_ICON_RADIUS + 4}
+                    />
+                  )}
+                  {renderPhaseIcon(marker.phaseEvent.phase)}
+                </g>
               </g>
-            </g>
-          ))}
+            ))}
 
-          {hoveredPoint && (
-            <>
-              <line
-                className="moon-distance-chart__hover-line"
-                x1={hoverState?.chartX ?? hoveredPoint.x}
-                x2={hoverState?.chartX ?? hoveredPoint.x}
-                y1={PADDING_TOP}
-                y2={PADDING_TOP + plotHeight}
-              />
-              <circle
-                className="moon-distance-chart__hover-marker"
-                cx={hoverState?.chartX ?? hoveredPoint.x}
-                cy={hoverState?.chartY ?? hoveredPoint.y}
-                data-testid="moon-distance-hover-marker"
-                r="6"
-              />
-            </>
-          )}
-          {hoveredPhaseMarker && (
-            <>
-              <line
-                className="moon-distance-chart__hover-line"
-                x1={hoveredPhaseMarker.x}
-                x2={hoveredPhaseMarker.x}
-                y1={PADDING_TOP}
-                y2={PADDING_TOP + plotHeight}
-              />
-              <circle
-                className="moon-distance-chart__hover-marker"
-                cx={hoveredPhaseMarker.x}
-                cy={hoveredPhaseMarker.y}
-                r="6"
-              />
-            </>
-          )}
+            {hoveredPoint && (
+              <>
+                <line
+                  className="moon-distance-chart__hover-line"
+                  x1={hoverState?.chartX ?? hoveredPoint.x}
+                  x2={hoverState?.chartX ?? hoveredPoint.x}
+                  y1={PADDING_TOP}
+                  y2={PADDING_TOP + plotHeight}
+                />
+                <circle
+                  className="moon-distance-chart__hover-marker"
+                  cx={hoverState?.chartX ?? hoveredPoint.x}
+                  cy={hoverState?.chartY ?? hoveredPoint.y}
+                  data-testid="moon-distance-hover-marker"
+                  r="6"
+                />
+              </>
+            )}
+            {hoveredPhaseMarker && (
+              <>
+                <line
+                  className="moon-distance-chart__hover-line"
+                  x1={hoveredPhaseMarker.x}
+                  x2={hoveredPhaseMarker.x}
+                  y1={PADDING_TOP}
+                  y2={PADDING_TOP + plotHeight}
+                />
+                <circle
+                  className="moon-distance-chart__hover-marker"
+                  cx={hoveredPhaseMarker.x}
+                  cy={hoveredPhaseMarker.y}
+                  r="6"
+                />
+              </>
+            )}
+          </g>
 
           {phaseMarkers.map((marker) => (
             <circle

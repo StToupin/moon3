@@ -19,8 +19,8 @@ test("recreates the ephemeris app with kernel-backed CSPICE execution in the bro
     timeout: 120_000,
   });
   await expect(page).toHaveURL(/step=4\b/);
-  await expect(page.getByRole("button", { name: "Previous" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Next" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Previous", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Next", exact: true })).toBeEnabled();
   await expect(page.locator('link[rel="icon"][type="image/x-icon"]')).toHaveAttribute(
     "href",
     "/favicon.ico?v=3",
@@ -133,7 +133,7 @@ test("persists the step query param and only requests textures for the matching 
   expect(requestedAssets.has("/earth-texture.jpg")).toBe(false);
   expect(requestedAssets.has("/sun-texture.jpg")).toBe(false);
 
-  await page.getByRole("button", { name: "Previous" }).click();
+  await page.getByRole("button", { name: "Previous", exact: true }).click();
 
   await expect(page.getByTestId("camera-state")).toHaveText(
     "SCHEMATIC (NOT TO SCALE) (1/5)",
@@ -147,6 +147,10 @@ test("renders the moon distance card and SVG chart", async ({
   page,
   context,
 }) => {
+  await page.setViewportSize({
+    width: 1280,
+    height: 900,
+  });
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({
     latitude: 48.8566,
@@ -156,8 +160,11 @@ test("renders the moon distance card and SVG chart", async ({
   await page.goto(`/?date=${encodeURIComponent(FIXED_DATE)}`);
 
   const moonDistancePanel = page.getByRole("region", { name: "Moon Distance" });
+  const sidebar = page.locator("#app-sidebar");
+  const resizeHandle = page.getByTestId("sidebar-resize-handle");
 
   await expect(moonDistancePanel).toBeVisible();
+  await expect(resizeHandle).toBeVisible();
   await expect(moonDistancePanel.getByTestId("moon-distance-chart")).toBeVisible({
     timeout: 120_000,
   });
@@ -166,6 +173,66 @@ test("renders the moon distance card and SVG chart", async ({
   expect(await moonDistancePanel.getByTestId("moon-phase-supermoon").count()).toBeGreaterThan(
     0,
   );
+
+  const initialSidebarHeight = await sidebar.evaluate(
+    (element) => element.getBoundingClientRect().height,
+  );
+  await page.setViewportSize({
+    width: 1280,
+    height: 700,
+  });
+  await expect
+    .poll(async () => {
+      return sidebar.evaluate((element) => element.getBoundingClientRect().height);
+    })
+    .toBeLessThan(initialSidebarHeight - 100);
+
+  const initialSidebarBox = await sidebar.boundingBox();
+  if (!initialSidebarBox) {
+    throw new Error("Unable to measure initial sidebar layout");
+  }
+
+  await page.setViewportSize({
+    width: 760,
+    height: 900,
+  });
+
+  await expect
+    .poll(async () => {
+      const box = await sidebar.boundingBox();
+      return box?.width ?? 0;
+    })
+    .toBeLessThan(initialSidebarBox.width - 40);
+  await expect
+    .poll(async () => {
+      const box = await sidebar.boundingBox();
+      return box?.width ?? 0;
+    })
+    .toBeLessThanOrEqual(442);
+
+  const sidebarBeforeResize = await sidebar.boundingBox();
+  const resizeHandleBox = await resizeHandle.boundingBox();
+  if (!sidebarBeforeResize || !resizeHandleBox) {
+    throw new Error("Unable to measure sidebar resize handle layout");
+  }
+  await page.mouse.move(
+    resizeHandleBox.x + resizeHandleBox.width / 2,
+    resizeHandleBox.y + resizeHandleBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    resizeHandleBox.x + resizeHandleBox.width / 2 - 48,
+    resizeHandleBox.y + resizeHandleBox.height / 2,
+    { steps: 6 },
+  );
+  await page.mouse.up();
+
+  const sidebarAfterResize = await sidebar.boundingBox();
+  if (!sidebarAfterResize) {
+    throw new Error("Unable to measure resized sidebar layout");
+  }
+  expect(sidebarAfterResize.width).toBeLessThan(sidebarBeforeResize.width - 6);
+  expect(sidebarAfterResize.width).toBeGreaterThanOrEqual(420);
 
   const chart = moonDistancePanel.getByTestId("moon-distance-chart");
   const chartBox = await chart.boundingBox();
@@ -213,7 +280,7 @@ test("renders the moon distance card and SVG chart", async ({
   );
 });
 
-test("opens the mobile sidebar drawer and keeps the chart controls available", async ({
+test("shows top and bottom mobile cards with the moon distance card collapsed by default", async ({
   page,
   context,
 }) => {
@@ -229,28 +296,43 @@ test("opens the mobile sidebar drawer and keeps the chart controls available", a
 
   await page.goto(`/?date=${encodeURIComponent(FIXED_DATE)}`);
 
-  const openMenuButton = page.getByRole("button", { name: "Open menu" });
-  const sidebar = page.locator("#app-sidebar");
-  const previousButton = page.getByRole("button", { name: "Previous" });
+  const moonDistancePanel = page.getByRole("region", { name: "Moon Distance" });
+  const previousButton = page.getByRole("button", { name: "Previous", exact: true });
+  const expandButton = page.getByRole("button", {
+    name: "Expand moon distance card",
+  });
+  const collapseNavigationButton = page.getByRole("button", {
+    name: "Collapse navigation card",
+  });
 
-  await expect(openMenuButton).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open menu" })).toHaveCount(0);
+  await expect(moonDistancePanel).toBeVisible();
   await expect(previousButton).toBeVisible();
-  await openMenuButton.click();
+  await expect(expandButton).toBeVisible();
+  await expect(collapseNavigationButton).toBeVisible();
+  await expect(moonDistancePanel.getByTestId("moon-distance-chart")).toHaveCount(0);
 
-  await expect(sidebar).toBeVisible();
+  await expandButton.click();
   await expect(
-    page.getByRole("button", { name: "Close menu", exact: true }),
+    page.getByRole("button", { name: "Collapse moon distance card" }),
   ).toBeVisible();
-  await expect(sidebar.getByRole("button", { name: "Previous" })).toBeVisible();
+  await expect(moonDistancePanel.getByTestId("moon-distance-chart")).toBeVisible({
+    timeout: 120_000,
+  });
 
+  await page.getByRole("button", { name: "Collapse moon distance card" }).click();
+  await expect(page.getByRole("button", { name: "Expand moon distance card" })).toBeVisible();
+  await expect(moonDistancePanel.getByTestId("moon-distance-chart")).toHaveCount(0);
+
+  await collapseNavigationButton.click();
+  await expect(page.getByRole("button", { name: "Expand navigation card" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Previous", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Next", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Play" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reset" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Previous day" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Next day" })).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Moon Distance" }).getByTestId(
-      "moon-distance-chart",
-    ),
-  ).toBeVisible({ timeout: 120_000 });
-
-  await page.getByRole("button", { name: "Close menu", exact: true }).click();
-  await expect(sidebar).not.toBeVisible();
-  await expect(openMenuButton).toBeVisible();
-  await expect(previousButton).toBeVisible();
+    page.locator(".mobile-bottom-bar").getByLabel("Ephemeris day offset"),
+  ).toBeVisible();
 });

@@ -4,6 +4,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { getBody, unflattenMatrix, unflattenOrbit } from "./api/ephemeris";
@@ -31,7 +32,13 @@ const PLAYBACK_STEP_DAYS = 1;
 const DEFAULT_CAMERA_STEP = 4;
 const DEFAULT_CAMERA_STATE: CameraStateName =
   CAMERA_STATE_ORDER[DEFAULT_CAMERA_STEP - 1] ?? "moon";
+const DESKTOP_SIDEBAR_DEFAULT_WIDTH = 520;
+const DESKTOP_SIDEBAR_MIN_WIDTH = 430;
+const DESKTOP_SIDEBAR_FLOOR_WIDTH = 320;
+const DESKTOP_SCENE_MIN_WIDTH = 320;
+const MOBILE_BREAKPOINT_QUERY = "(max-width: 720px)";
 const STEP_SEARCH_PARAM = "step";
+const APP_HEIGHT_CSS_VARIABLE = "--app-height";
 
 declare global {
   interface Window {
@@ -52,10 +59,49 @@ function getCameraStateFromStep(stepParam: string | null): CameraStateName | nul
   return CAMERA_STATE_ORDER[parsedStep - 1] ?? null;
 }
 
+function getSidebarResizeBounds() {
+  const maxWidth = Math.max(
+    DESKTOP_SIDEBAR_FLOOR_WIDTH,
+    window.innerWidth - DESKTOP_SCENE_MIN_WIDTH,
+  );
+  const minWidth = Math.min(DESKTOP_SIDEBAR_MIN_WIDTH, maxWidth);
+
+  return {
+    maxWidth,
+    minWidth,
+  };
+}
+
+function clampSidebarWidth(width: number): number {
+  const { minWidth, maxWidth } = getSidebarResizeBounds();
+
+  return Math.min(Math.max(width, minWidth), maxWidth);
+}
+
+function syncViewportHeightVariable() {
+  const nextViewportHeight = Math.round(
+    window.visualViewport?.height ?? window.innerHeight,
+  );
+  document.documentElement.style.setProperty(
+    APP_HEIGHT_CSS_VARIABLE,
+    `${nextViewportHeight}px`,
+  );
+}
+
 export default function App() {
   const [dayOffset, setDayOffset] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [desktopSidebarWidth, setDesktopSidebarWidth] = useState(() =>
+    clampSidebarWidth(DESKTOP_SIDEBAR_DEFAULT_WIDTH),
+  );
+  const [isMobileLayout, setIsMobileLayout] = useState(() =>
+    window.matchMedia(MOBILE_BREAKPOINT_QUERY).matches,
+  );
+  const [isMoonDistanceCollapsed, setIsMoonDistanceCollapsed] = useState(() =>
+    window.matchMedia(MOBILE_BREAKPOINT_QUERY).matches,
+  );
+  const [isNavigationCollapsed, setIsNavigationCollapsed] = useState(false);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [currentCameraState, setCurrentCameraState] =
     useState<CameraStateName>(() => {
       const stepParam = new URLSearchParams(window.location.search).get(
@@ -94,6 +140,46 @@ export default function App() {
 
     return () => window.clearInterval(intervalId);
   }, [isPlaying]);
+
+  useEffect(() => {
+    const mediaQueryList = window.matchMedia(MOBILE_BREAKPOINT_QUERY);
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobileLayout(event.matches);
+      setIsMoonDistanceCollapsed(event.matches);
+      setIsNavigationCollapsed(false);
+      setDesktopSidebarWidth((previous) => clampSidebarWidth(previous));
+    };
+
+    setIsMobileLayout(mediaQueryList.matches);
+    setIsMoonDistanceCollapsed(mediaQueryList.matches);
+    setIsNavigationCollapsed(false);
+    setDesktopSidebarWidth((previous) => clampSidebarWidth(previous));
+    mediaQueryList.addEventListener("change", handleChange);
+
+    return () => mediaQueryList.removeEventListener("change", handleChange);
+  }, []);
+
+  const desktopSidebarWidthRef = useRef(desktopSidebarWidth);
+
+  useEffect(() => {
+    desktopSidebarWidthRef.current = desktopSidebarWidth;
+  }, [desktopSidebarWidth]);
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      syncViewportHeightVariable();
+      setDesktopSidebarWidth((previous) => clampSidebarWidth(previous));
+    };
+
+    syncViewportHeightVariable();
+    window.addEventListener("resize", handleWindowResize);
+    window.visualViewport?.addEventListener("resize", handleWindowResize);
+    return () => {
+      window.removeEventListener("resize", handleWindowResize);
+      window.visualViewport?.removeEventListener("resize", handleWindowResize);
+      document.documentElement.style.removeProperty(APP_HEIGHT_CSS_VARIABLE);
+    };
+  }, []);
 
   const isoDate = useMemo(() => {
     const now = new Date(baseTimeMs ?? Date.now());
@@ -287,13 +373,14 @@ export default function App() {
     },
     [],
   );
-  const handleOpenSidebar = useCallback(() => {
-    setIsSidebarOpen(true);
+  const handleStepDayBackward = useCallback(() => {
+    setDayOffset((previous) => Math.max(previous - 1, MIN_DAY_OFFSET));
+    setIsPlaying(false);
   }, []);
-  const handleCloseSidebar = useCallback(() => {
-    setIsSidebarOpen(false);
+  const handleStepDayForward = useCallback(() => {
+    setDayOffset((previous) => Math.min(previous + 1, MAX_DAY_OFFSET));
+    setIsPlaying(false);
   }, []);
-
   const currentCameraIndex = CAMERA_STATE_ORDER.indexOf(currentCameraState);
   const currentCameraLabel = formatCameraStateLabel(currentCameraState);
   const currentStep = currentCameraIndex + 1;
@@ -310,9 +397,73 @@ export default function App() {
     setDayOffset(0);
     setIsPlaying(false);
   }, []);
+  const handleToggleMoonDistanceCard = useCallback(() => {
+    setIsMoonDistanceCollapsed((previous) => !previous);
+  }, []);
+  const handleToggleNavigationCard = useCallback(() => {
+    setIsNavigationCollapsed((previous) => !previous);
+  }, []);
+  const handleSidebarResizeStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (isMobileLayout) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const startX = event.clientX;
+      const startWidth = desktopSidebarWidthRef.current;
+
+      setIsResizingSidebar(true);
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const nextWidth = clampSidebarWidth(startWidth + (moveEvent.clientX - startX));
+        setDesktopSidebarWidth(nextWidth);
+      };
+
+      const handlePointerUp = () => {
+        setIsResizingSidebar(false);
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+      };
+
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp, { once: true });
+    },
+    [isMobileLayout],
+  );
+  const handleSidebarResizeKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (isMobileLayout) {
+        return;
+      }
+
+      let nextWidth: number | null = null;
+
+      switch (event.key) {
+        case "ArrowLeft":
+          nextWidth = desktopSidebarWidthRef.current - 24;
+          break;
+        case "ArrowRight":
+          nextWidth = desktopSidebarWidthRef.current + 24;
+          break;
+        case "Home":
+          nextWidth = DESKTOP_SIDEBAR_MIN_WIDTH;
+          break;
+        default:
+          return;
+      }
+
+      event.preventDefault();
+      setDesktopSidebarWidth(clampSidebarWidth(nextWidth));
+    },
+    [isMobileLayout],
+  );
   const navigationCardProps = {
     canGoNext: currentCameraIndex < CAMERA_STATE_ORDER.length - 1,
     canGoPrevious: currentCameraIndex > 0,
+    canStepDayForward: dayOffset < MAX_DAY_OFFSET,
+    canStepDayBackward: dayOffset > MIN_DAY_OFFSET,
     currentCameraLabel,
     currentStep,
     dayOffset,
@@ -324,6 +475,8 @@ export default function App() {
     onPrevious: handlePreviousCamera,
     onReset: handleResetTimeline,
     onSliderChange: handleSliderChange,
+    onStepDayBackward: handleStepDayBackward,
+    onStepDayForward: handleStepDayForward,
     onTogglePlayback: handleTogglePlayback,
     totalSteps: CAMERA_STATE_ORDER.length,
   };
@@ -344,53 +497,49 @@ export default function App() {
     );
   }, [currentStep]);
 
-  useEffect(() => {
-    if (!isSidebarOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsSidebarOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSidebarOpen]);
-
   return (
     <main className="ephemeris-page">
-      <div className="solar-system-container">
-        <button
-          aria-controls="app-sidebar"
-          aria-label="Open menu"
-          className={`sidebar-menu-button ${isSidebarOpen ? "sidebar-menu-button--hidden" : ""}`}
-          onClick={handleOpenSidebar}
-          type="button"
-        >
-          <span aria-hidden="true" className="sidebar-menu-button__icon">
-            ≡
-          </span>
-          <span className="sidebar-menu-button__label">Menu</span>
-        </button>
+      <div
+        className={`solar-system-container ${
+          isResizingSidebar ? "solar-system-container--resizing" : ""
+        }`}
+        style={
+          isMobileLayout
+            ? undefined
+            : {
+                gridTemplateColumns: `${desktopSidebarWidth}px minmax(0, 1fr)`,
+              }
+        }
+      >
+        <div className="app-sidebar-shell">
+          <AppSidebar
+            isMoonDistanceCollapsed={isMobileLayout && isMoonDistanceCollapsed}
+            isMoonDistanceCollapsible={isMobileLayout}
+            isLoadingMoonDistance={isLoadingMoonDistance}
+            moonDistanceError={moonDistanceError}
+            moonDistanceSeries={moonDistanceSeries}
+            navigationCardProps={navigationCardProps}
+            onToggleMoonDistance={handleToggleMoonDistanceCard}
+          />
 
-        <button
-          aria-label="Close menu overlay"
-          className={`sidebar-backdrop ${isSidebarOpen ? "sidebar-backdrop--visible" : ""}`}
-          onClick={handleCloseSidebar}
-          tabIndex={isSidebarOpen ? 0 : -1}
-          type="button"
-        />
-
-        <AppSidebar
-          isLoadingMoonDistance={isLoadingMoonDistance}
-          isOpen={isSidebarOpen}
-          moonDistanceError={moonDistanceError}
-          moonDistanceSeries={moonDistanceSeries}
-          navigationCardProps={navigationCardProps}
-          onCloseSidebar={handleCloseSidebar}
-        />
+          {!isMobileLayout && (
+            <div
+              aria-label="Resize sidebar"
+              aria-orientation="vertical"
+              aria-valuemax={getSidebarResizeBounds().maxWidth}
+              aria-valuemin={getSidebarResizeBounds().minWidth}
+              aria-valuenow={Math.round(desktopSidebarWidth)}
+              className="sidebar-resize-handle"
+              data-testid="sidebar-resize-handle"
+              onKeyDown={handleSidebarResizeKeyDown}
+              onPointerDown={handleSidebarResizeStart}
+              role="separator"
+              tabIndex={0}
+            >
+              <span aria-hidden="true" className="sidebar-resize-handle__grip" />
+            </div>
+          )}
+        </div>
 
         <SceneStage
           currentCameraState={currentCameraState}
@@ -400,14 +549,15 @@ export default function App() {
           solarSystemData={solarSystemData}
         />
 
-        {!isSidebarOpen && (
-          <div className="mobile-bottom-bar">
-            <NavigationCard
-              className="app-navigation-card app-navigation-card--mobile"
-              {...navigationCardProps}
-            />
-          </div>
-        )}
+        <div className="mobile-bottom-bar">
+          <NavigationCard
+            className="app-navigation-card app-navigation-card--mobile"
+            isCollapsed={isMobileLayout && isNavigationCollapsed}
+            isCollapsible={isMobileLayout}
+            onToggleCollapse={handleToggleNavigationCard}
+            {...navigationCardProps}
+          />
+        </div>
       </div>
     </main>
   );

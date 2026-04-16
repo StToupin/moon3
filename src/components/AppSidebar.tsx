@@ -1,4 +1,5 @@
 import type { MoonDistanceSeriesReply } from "../api/ephemeris";
+import { useCollapsibleTransition } from "../hooks/useCollapsibleTransition";
 import { MoonDistanceChart } from "./MoonDistanceChart";
 import { NavigationCard, type NavigationCardProps } from "./NavigationCard";
 
@@ -8,42 +9,38 @@ type SidebarNavigationCardProps = Omit<
 >;
 
 interface AppSidebarProps {
+  isMoonDistanceCollapsed: boolean;
+  isMoonDistanceCollapsible: boolean;
   isLoadingMoonDistance: boolean;
-  isOpen: boolean;
   moonDistanceError: Error | null;
   moonDistanceSeries: MoonDistanceSeriesReply | null | undefined;
   navigationCardProps: SidebarNavigationCardProps;
-  onCloseSidebar: () => void;
+  onToggleMoonDistance: () => void;
 }
 
 export function AppSidebar({
+  isMoonDistanceCollapsed,
+  isMoonDistanceCollapsible,
   isLoadingMoonDistance,
-  isOpen,
   moonDistanceError,
   moonDistanceSeries,
   navigationCardProps,
-  onCloseSidebar,
+  onToggleMoonDistance,
 }: AppSidebarProps) {
-  return (
-    <aside
-      aria-label="Controls and moon distance"
-      className={`app-sidebar ${isOpen ? "app-sidebar--open" : ""}`}
-      id="app-sidebar"
-    >
-      <button
-        aria-label="Close menu"
-        className="sidebar-close-button"
-        onClick={onCloseSidebar}
-        type="button"
-      >
-        ×
-      </button>
+  const { ref: contentRef, shouldRender: shouldRenderContent } =
+    useCollapsibleTransition(
+      !isMoonDistanceCollapsible || !isMoonDistanceCollapsed,
+    );
 
+  return (
+    <aside aria-label="Controls and moon distance" className="app-sidebar" id="app-sidebar">
       <div className="app-sidebar__inner">
         <div className="app-sidebar__content">
           <section
             aria-label="Moon Distance"
-            className="hud-card tab-panel"
+            className={`hud-card tab-panel ${
+              isMoonDistanceCollapsed ? "tab-panel--collapsed" : ""
+            } ${isMoonDistanceCollapsible ? "tab-panel--collapsible" : ""}`}
             id="moon-distance-panel"
             role="region"
           >
@@ -51,25 +48,62 @@ export function AppSidebar({
               <div className="tab-panel__heading">
                 <h2>Moon Distance</h2>
               </div>
+              {isMoonDistanceCollapsible && (
+                <button
+                  aria-controls="moon-distance-panel-content"
+                  aria-expanded={!isMoonDistanceCollapsed}
+                  aria-label={
+                    isMoonDistanceCollapsed
+                      ? "Expand moon distance card"
+                      : "Collapse moon distance card"
+                  }
+                  className="tab-panel__toggle"
+                  onClick={onToggleMoonDistance}
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    className={`tab-panel__toggle-icon ${
+                      isMoonDistanceCollapsed
+                        ? "tab-panel__toggle-icon--collapsed"
+                        : ""
+                    }`}
+                    viewBox="0 0 12 8"
+                  >
+                    <path d="M1.5 1.5 6 6 10.5 1.5" />
+                  </svg>
+                </button>
+              )}
             </div>
 
-            {moonDistanceError && (
+            {shouldRenderContent && (
               <div
-                className="tab-panel__message tab-panel__message--error"
-                role="alert"
+                aria-hidden={isMoonDistanceCollapsible && isMoonDistanceCollapsed}
+                className="tab-panel__collapse"
+                id="moon-distance-panel-content"
+                ref={contentRef}
               >
-                Error: {moonDistanceError.message}
+                <div className="tab-panel__content">
+                  {moonDistanceError && (
+                    <div
+                      className="tab-panel__message tab-panel__message--error"
+                      role="alert"
+                    >
+                      Error: {moonDistanceError.message}
+                    </div>
+                  )}
+
+                  {isLoadingMoonDistance && !moonDistanceSeries && (
+                    <div className="tab-panel__message">
+                      <div className="loader tab-panel__loader"></div>
+                      <span>Computing daily Earth-Moon distances&hellip;</span>
+                    </div>
+                  )}
+
+                  {moonDistanceSeries && <MoonDistanceChart series={moonDistanceSeries} />}
+                </div>
               </div>
             )}
-
-            {isLoadingMoonDistance && !moonDistanceSeries && (
-              <div className="tab-panel__message">
-                <div className="loader tab-panel__loader"></div>
-                <span>Computing daily Earth-Moon distances&hellip;</span>
-              </div>
-            )}
-
-            {moonDistanceSeries && <MoonDistanceChart series={moonDistanceSeries} />}
           </section>
         </div>
 
