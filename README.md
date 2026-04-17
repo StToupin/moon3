@@ -184,6 +184,58 @@ To publish the site:
 
 Each push to `main` builds the app and publishes `dist` to GitHub Pages automatically.
 
+## Vercel PR Preview Deployments
+
+This repository now also includes a pull-request preview workflow at
+`.github/workflows/vercel-preview.yml`.
+
+Use this if you want a unique Vercel preview URL on each PR while keeping GitHub
+Pages as the production deploy for `main`.
+
+### One-Time Setup
+
+1. Create a Vercel account or team on the free plan.
+2. Install the Vercel CLI locally:
+
+   ```bash
+   npm install --global vercel@latest
+   ```
+
+3. From the repository root, log in and link this directory to a Vercel project:
+
+   ```bash
+   vercel login
+   vercel link
+   ```
+
+   If you want GitHub Actions to be the only deploy path, do not import this repo
+   into Vercel through the GitHub integration. Linking with the CLI is enough.
+
+4. After `vercel link`, open `.vercel/project.json` and copy:
+   - `orgId`
+   - `projectId`
+
+5. In Vercel, create an access token:
+   - `Settings -> Tokens -> Create`
+
+6. In GitHub, add these repository secrets:
+   - `VERCEL_TOKEN`
+   - `VERCEL_ORG_ID`
+   - `VERCEL_PROJECT_ID`
+
+7. Push the workflow to GitHub. Each same-repository PR will build the app,
+   upload the prebuilt output to Vercel, and post the preview URL back onto the
+   PR as a comment.
+
+### Notes
+
+- The workflow builds inside GitHub Actions with `vercel build`, then deploys the
+  generated `.vercel/output` directory with `vercel deploy --prebuilt`.
+- Forked PRs are intentionally skipped because GitHub does not expose repository
+  secrets to `pull_request` workflows from forks.
+- The workflow forces `VITE_BASE_PATH=/` so previews are served from the domain
+  root instead of the GitHub Pages subpath.
+
 ## Why WebAssembly SPICE?
 
 This project keeps the ephemeris logic close to the UI:

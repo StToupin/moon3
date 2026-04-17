@@ -1,0 +1,123 @@
+name: Vercel Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: vercel-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VITE_BASE_PATH: /
+
+jobs:
+  deploy-preview:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Restore WASM SPICE cache
+        id: wasm-cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/wasm-spice
+          key: ${{ runner.os }}-wasm-spice-${{ hashFiles('scripts/prepare-wasm-spice.mjs', 'spice/**') }}
+
+      - name: Install tcsh
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y tcsh
+
+      - name: Install Emscripten SDK
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          cd "$RUNNER_TEMP/emsdk"
+          ./emsdk install latest
+          ./emsdk activate latest
+          echo "$RUNNER_TEMP/emsdk" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/emsdk/upstream/emscripten" >> "$GITHUB_PATH"
+          echo "EMSDK=$RUNNER_TEMP/emsdk" >> "$GITHUB_ENV"
+          echo "EM_CONFIG=$RUNNER_TEMP/emsdk/.emscripten" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Vercel output
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy preview
+        id: deploy
+        run: |
+          preview_url="$(vercel deploy --prebuilt --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} --no-color)"
+          echo "preview_url=${preview_url}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Vercel Preview"
+            echo
+            echo "- ${preview_url}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.preview_url }}
+        with:
+          script: |
+            const header = "## Vercel Preview";
+            const body = [
+              header,
+              "",
+              `Preview ready: ${process.env.PREVIEW_URL}`,
+              "",
+              "_This comment updates on each new push to the PR._",
+            ].join("\n");
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) => {
+              return comment.user?.type === "Bot" && comment.body?.includes(header);
+            });
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number,
+                body,
+              });
+            }

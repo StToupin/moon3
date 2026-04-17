@@ -10,3 +10,5 @@ spice/*.tls
 spice/*.tpc
 spice/*.bpc
 spice/*.tf
+.vercel
+.env*.local
