@@ -1,14 +1,9 @@
-import { Suspense, useEffect, useState } from "react";
-import { SolarSystemView, type CameraStateName } from "./SolarSystemView";
-import type { Cameras, SolarSystem } from "./types";
+import { Suspense, memo, useEffect, useState } from "react";
+import type { CameraStateName } from "../cameraViews";
+import type { SolarSystemSceneData } from "../hooks/useSceneData";
+import { SolarSystemView } from "./SolarSystemView";
 
 const SCENE_LOADING_OVERLAY_DELAY_MS = 180;
-
-interface SolarSystemSceneData {
-  cameras: Cameras;
-  solarSystem: SolarSystem;
-  surfacePoint: [number, number, number];
-}
 
 interface SceneStageProps {
   currentCameraState: CameraStateName;
@@ -41,7 +36,7 @@ function DelayedSceneFallback() {
   );
 }
 
-export function SceneStage({
+export const SceneStage = memo(function SceneStage({
   currentCameraState,
   error,
   isLoadingEphemeris,
@@ -75,4 +70,4 @@ export function SceneStage({
       )}
     </div>
   );
-}
+});

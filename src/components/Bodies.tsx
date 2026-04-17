@@ -1,8 +1,9 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { Line } from "@react-three/drei";
 import { useFrame, useLoader } from "@react-three/fiber";
 import { Matrix4, Quaternion, TextureLoader, Vector3 } from "three";
 import * as THREE from "three";
+import type { Line2 } from "three-stdlib";
 import type { SolarSystem } from "./types";
 import { withBase } from "../basePath";
 
@@ -62,6 +63,44 @@ function lerpArray(
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 }
 
+function interpolateOrbitPoints(
+  normalOrbit: Vector3[],
+  schematicOrbit: Vector3[],
+  progress: number,
+): Vector3[] {
+  return normalOrbit.map((normalPoint, index) => {
+    const schematicPoint = schematicOrbit[index];
+    return new Vector3(
+      lerp(normalPoint.x, schematicPoint.x, progress),
+      lerp(normalPoint.y, schematicPoint.y, progress),
+      lerp(normalPoint.z, schematicPoint.z, progress),
+    );
+  });
+}
+
+function flattenOrbitPoints(points: Vector3[]): Float32Array {
+  const flattenedPoints = new Float32Array(points.length * 3);
+
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    const offset = index * 3;
+    flattenedPoints[offset] = point.x;
+    flattenedPoints[offset + 1] = point.y;
+    flattenedPoints[offset + 2] = point.z;
+  }
+
+  return flattenedPoints;
+}
+
+function updateOrbitLine(line: Line2 | null, points: Vector3[]) {
+  if (!line) {
+    return;
+  }
+
+  line.geometry.setPositions(flattenOrbitPoints(points));
+  line.geometry.computeBoundingSphere();
+}
+
 function SunTexturedMaterial() {
   const texture = useLoader(TextureLoader, SUN_TEXTURE_URL);
 
@@ -116,7 +155,7 @@ export function Bodies({
   const sunRef = useRef<THREE.Mesh>(null);
   const earthRef = useRef<THREE.Mesh>(null);
   const moonRef = useRef<THREE.Mesh>(null);
-  const [moonOrbitPoints, setMoonOrbitPoints] = useState<Vector3[]>([]);
+  const moonOrbitLineRef = useRef<Line2 | null>(null);
 
   const states = useMemo(() => {
     const realEarthPosition = new Vector3(...solarSystem.EARTH.position);
@@ -176,6 +215,9 @@ export function Bodies({
       },
     };
   }, [solarSystem]);
+  const applyMoonOrbitPoints = useCallback((points: Vector3[]) => {
+    updateOrbitLine(moonOrbitLineRef.current, points);
+  }, []);
 
   useFrame((_, delta) => {
     const speed = 1 / SCHEMATIC_TRANSITION_DURATION;
@@ -223,15 +265,9 @@ export function Bodies({
     }
 
     if (previousProgress !== transition && normal.moonOrbit.length > 0) {
-      const interpolatedOrbit = normal.moonOrbit.map((normalPoint, index) => {
-        const schematicPoint = schematic.moonOrbit[index];
-        return new Vector3(
-          lerp(normalPoint.x, schematicPoint.x, transition),
-          lerp(normalPoint.y, schematicPoint.y, transition),
-          lerp(normalPoint.z, schematicPoint.z, transition),
-        );
-      });
-      setMoonOrbitPoints(interpolatedOrbit);
+      applyMoonOrbitPoints(
+        interpolateOrbitPoints(normal.moonOrbit, schematic.moonOrbit, transition),
+      );
     }
   });
 
@@ -240,25 +276,23 @@ export function Bodies({
       (solarSystem.EARTH.orbit ?? []).map(
         (point) => new Vector3(point[0], point[1], point[2]),
       ),
-    [solarSystem],
+    [solarSystem.EARTH.orbit],
   );
 
   useLayoutEffect(() => {
+    if (!showOrbits) {
+      return;
+    }
+
     const transition = animationProgress.current;
     const { normal, schematic } = states;
 
     if (normal.moonOrbit.length > 0) {
-      const interpolatedOrbit = normal.moonOrbit.map((normalPoint, index) => {
-        const schematicPoint = schematic.moonOrbit[index];
-        return new Vector3(
-          lerp(normalPoint.x, schematicPoint.x, transition),
-          lerp(normalPoint.y, schematicPoint.y, transition),
-          lerp(normalPoint.z, schematicPoint.z, transition),
-        );
-      });
-      setMoonOrbitPoints(interpolatedOrbit);
+      applyMoonOrbitPoints(
+        interpolateOrbitPoints(normal.moonOrbit, schematic.moonOrbit, transition),
+      );
     }
-  }, [states]);
+  }, [applyMoonOrbitPoints, showOrbits, states]);
 
   return (
     <>
@@ -304,8 +338,13 @@ export function Bodies({
         />
       </mesh>
 
-      {showOrbits && moonOrbitPoints.length >= 2 && (
-        <Line points={moonOrbitPoints} color="white" lineWidth={2} />
+      {showOrbits && states.normal.moonOrbit.length >= 2 && (
+        <Line
+          ref={moonOrbitLineRef}
+          color="white"
+          lineWidth={2}
+          points={states.normal.moonOrbit}
+        />
       )}
     </>
   );

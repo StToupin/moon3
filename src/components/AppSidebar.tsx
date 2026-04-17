@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { MoonDistanceSeriesReply } from "../api/ephemeris";
 import { useCollapsibleTransition } from "../hooks/useCollapsibleTransition";
 import { MoonDistanceChart } from "./MoonDistanceChart";
@@ -18,7 +19,7 @@ interface AppSidebarProps {
   onToggleMoonDistance: () => void;
 }
 
-export function AppSidebar({
+export const AppSidebar = memo(function AppSidebar({
   isMoonDistanceCollapsed,
   isMoonDistanceCollapsible,
   isLoadingMoonDistance,
@@ -115,4 +116,4 @@ export function AppSidebar({
       </div>
     </aside>
   );
-}
+});

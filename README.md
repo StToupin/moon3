@@ -12,9 +12,12 @@ It renders an interactive 3D view of the Sun, Earth, and Moon, including:
 
 - body positions and orientations computed from SPICE kernels
 - Earth and Moon orbit paths
-- multiple camera viewpoints
-- a surface-point-aware Moon view based on the user's geolocation
+- five guided camera steps: schematic, solar system, Earth and Moon, Moon, and Earth
+- a Moon view from the user's current Earth location
+- an Earth close-up targeted at a geolocated surface point
+- a moon-distance chart with lunar phase markers and supermoon highlighting
 - time scrubbing and playback for exploring motion over time
+- desktop and mobile control layouts with collapsible cards
 
 No backend is required once the app is built. Ephemeris calculations happen client-side.
 To keep the browser payload smaller, Earth rotation uses the generic `IAU_EARTH`
@@ -31,8 +34,10 @@ the Sun, Earth barycenter, Earth, and Moon segments used by the app.
 - React 19
 - Vite
 - TypeScript
+- TanStack Query
 - Three.js with React Three Fiber
 - NASA SPICE / CSPICE compiled to WebAssembly
+- Playwright
 
 ## Local Development
 
@@ -41,14 +46,22 @@ the Sun, Earth barycenter, Earth, and Moon segments used by the app.
 You will need:
 
 - Node.js 22+
-- Python 3 (only needed when the ignored local kernel cache must be rebuilt)
+- Python 3
+
+The repository already includes the generated browser-facing SPICE assets and the
+reduced kernel set used by the app, so ordinary development does not require a
+local Emscripten toolchain.
+
+You only need the full native rebuild toolchain if you want to force a fresh
+CSPICE rebuild from the pinned upstream source archive:
+
 - `emcc`
 - `tcsh`
 - `tar`
 
-The first build prepares the browser-ready CSPICE bundle from a pinned upstream source archive. Build artifacts are cached under `.cache`, so repeated runs are much faster.
-If the local SPICE kernel sources are missing, the prepare step also downloads the
-generic kernels and rebuilds the reduced `de432s.bsp` subset automatically.
+The prepare step keeps a local cache under `.cache`, so repeated runs are much
+faster. If the local SPICE kernel sources are missing, it also downloads the
+generic kernels and can regenerate the reduced `de432s.bsp` subset automatically.
 
 ### Install
 
@@ -94,7 +107,7 @@ If you want to force a fresh CSPICE rebuild:
 npm run rebuild:spice
 ```
 
-This regenerates the runtime assets under:
+This regenerates the browser runtime assets under:
 
 - `src/spice/generated`
 - `public/spice`
@@ -106,7 +119,9 @@ If you want to regenerate the reduced planetary kernel from an official
 python3 scripts/reduce-spk.py /path/to/de432s.bsp spice/de432s.bsp
 ```
 
-This helper script requires `spiceypy` and `numpy`.
+This helper script requires `spiceypy` and `numpy`. The prepare script creates a
+local virtual environment under `.cache/spk-reducer` when it needs to do this
+automatically.
 
 ## Testing
 
@@ -116,7 +131,17 @@ Run the Playwright end-to-end suite:
 npm run test:e2e
 ```
 
-The tests validate the browser-side ephemeris pipeline against kernel-backed CSPICE outputs.
+Run the lightweight helper-level tests:
+
+```bash
+node --test src/cameraViews.test.ts
+```
+
+The test coverage currently focuses on:
+
+- browser-side ephemeris and rendering behavior through Playwright
+- camera-step parsing and shared camera metadata helpers
+- moon-distance chart geometry and hover behavior
 
 ## Deterministic Demos
 
@@ -124,7 +149,27 @@ You can pin the app to a fixed date with the `date` query parameter:
 
 - [http://localhost:5174/?date=2026-04-15T18:54:41.304Z](http://localhost:5174/?date=2026-04-15T18:54:41.304Z)
 
-This is useful for debugging, demos, and visual comparisons.
+You can also select the initial camera step with `step=1` through `step=5`:
+
+- `1` = schematic
+- `2` = solar system
+- `3` = Earth and Moon
+- `4` = Moon
+- `5` = Earth
+
+Example:
+
+- [http://localhost:5174/?date=2026-04-15T18:54:41.304Z&step=4](http://localhost:5174/?date=2026-04-15T18:54:41.304Z&step=4)
+
+This is useful for debugging, demos, visual comparisons, and deterministic screenshots.
+
+## Geolocation Behavior
+
+The app requests browser geolocation so it can derive an Earth surface point and
+an above-surface viewing position for the Moon and Earth close-up steps.
+
+If geolocation is unavailable or denied, the app falls back to a default location
+of Paris (`48.8566, 2.3522`) so the visualization remains usable.
 
 ## GitHub Pages Deployment
 

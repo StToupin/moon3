@@ -1,22 +1,21 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import { OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { PerspectiveCamera, Quaternion, Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import {
+  getCameraDisplayState,
+  getCameraViewSceneOptions,
+  getMobileFovMultiplier,
+  type CameraDisplayState,
+  type CameraStateName,
+} from "../cameraViews";
 import { Bodies } from "./Bodies";
 import type { Cameras, SolarSystem } from "./types";
 
-interface CameraDisplayState {
-  display: string;
-  position: [number, number, number];
-  target: [number, number, number];
-  up: [number, number, number];
-  fov: number;
-}
-
 interface CameraControllerProps {
   targetState: CameraDisplayState;
-  viewName: string;
+  viewName: CameraStateName;
   controlsRef: RefObject<OrbitControlsImpl | null>;
 }
 
@@ -43,13 +42,6 @@ interface LiveCameraDebugState {
 
 const CAMERA_TRANSITION_DURATION = 0.8;
 const MOBILE_MAX_WIDTH = 720;
-const MOBILE_FOV_MULTIPLIERS: Record<CameraStateName, number> = {
-  schematic: 1.8,
-  solar_system: 1.72,
-  earth_moon: 1.45,
-  moon: 1.24,
-  earth: 1.18,
-};
 
 function interpolate(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -163,9 +155,7 @@ function CameraController({
   const transitionRef = useRef<CameraTransition | null>(null);
   const hasInitializedRef = useRef(false);
   const mobileFovMultiplier =
-    size.width <= MOBILE_MAX_WIDTH
-      ? MOBILE_FOV_MULTIPLIERS[viewName as CameraStateName]
-      : 1;
+    size.width <= MOBILE_MAX_WIDTH ? getMobileFovMultiplier(viewName) : 1;
   const adjustedFov = targetState.fov * mobileFovMultiplier;
 
   useFrame((_, delta) => {
@@ -318,36 +308,6 @@ function CameraController({
   return null;
 }
 
-export type CameraStateName =
-  | "schematic"
-  | "solar_system"
-  | "earth_moon"
-  | "earth"
-  | "moon";
-
-export const CAMERA_STATE_ORDER: CameraStateName[] = [
-  "schematic",
-  "solar_system",
-  "earth_moon",
-  "moon",
-  "earth",
-];
-
-export function formatCameraStateLabel(state: CameraStateName): string {
-  switch (state) {
-    case "schematic":
-      return "Schematic (not to scale)";
-    case "solar_system":
-      return "Solar system";
-    case "earth_moon":
-      return "Earth and Moon";
-    case "earth":
-      return "Earth";
-    case "moon":
-      return "Moon";
-  }
-}
-
 export interface SolarSystemViewProps {
   solarSystem: SolarSystem;
   cameras: Cameras;
@@ -355,74 +315,45 @@ export interface SolarSystemViewProps {
   currentState: CameraStateName;
 }
 
-export function SolarSystemView({
+export const SolarSystemView = memo(function SolarSystemView({
   solarSystem,
   cameras,
   surfacePoint,
   currentState,
 }: SolarSystemViewProps) {
   const orbitControlsRef = useRef<OrbitControlsImpl | null>(null);
-
-  const cameraStates: Record<CameraStateName, CameraDisplayState> = {
-    schematic: {
-      display: formatCameraStateLabel("schematic"),
-      position: cameras.sun.position,
-      target: cameras.sun.target,
-      up: cameras.sun.up,
-      fov: 70,
-    },
-    solar_system: {
-      display: formatCameraStateLabel("solar_system"),
-      position: cameras.sun.position,
-      target: cameras.sun.target,
-      up: cameras.sun.up,
-      fov: 70,
-    },
-    earth_moon: {
-      display: formatCameraStateLabel("earth_moon"),
-      position: cameras.earth.position,
-      target: cameras.earth.target,
-      up: cameras.earth.up,
-      fov: 70,
-    },
-    earth: {
-      display: formatCameraStateLabel("earth"),
-      position: cameras.moon.position,
-      target: surfacePoint,
-      up: [
-        solarSystem.EARTH.rotationMatrix[0][2],
-        solarSystem.EARTH.rotationMatrix[1][2],
-        solarSystem.EARTH.rotationMatrix[2][2],
-      ],
-      fov: 70,
-    },
-    moon: {
-      display: formatCameraStateLabel("moon"),
-      position: cameras.moon.position,
-      target: cameras.moon.target,
-      up: cameras.moon.up,
-      fov: 1,
-    },
-  };
-
-  const schematicMode = currentState === "schematic";
-  const showEarthTexture =
-    currentState === "schematic" ||
-    currentState === "earth_moon" ||
-    currentState === "earth";
-  const showSunTexture = currentState === "schematic";
-  const showOrbits =
-    currentState === "schematic" ||
-    currentState === "solar_system" ||
-    currentState === "earth_moon";
+  const currentCameraDisplayState = useMemo(
+    () =>
+      getCameraDisplayState({
+        cameras,
+        solarSystem,
+        state: currentState,
+        surfacePoint,
+      }),
+    [cameras, currentState, solarSystem, surfacePoint],
+  );
+  const defaultCameraDisplayState = useMemo(
+    () =>
+      getCameraDisplayState({
+        cameras,
+        solarSystem,
+        state: "solar_system",
+        surfacePoint,
+      }),
+    [cameras, solarSystem, surfacePoint],
+  );
+  const sceneOptions = useMemo(
+    () => getCameraViewSceneOptions(currentState),
+    [currentState],
+  );
 
   return (
     <div className="scene-shell">
       <Canvas
         camera={{
-          position: cameraStates.solar_system.position,
-          fov: cameraStates.solar_system.fov,
-          up: cameraStates.solar_system.up,
+          position: defaultCameraDisplayState.position,
+          fov: defaultCameraDisplayState.fov,
+          up: defaultCameraDisplayState.up,
           near: 1000,
           far: 1000000000,
         }}
@@ -431,12 +362,12 @@ export function SolarSystemView({
       >
         <CameraController
           controlsRef={orbitControlsRef}
-          targetState={cameraStates[currentState]}
+          targetState={currentCameraDisplayState}
           viewName={currentState}
         />
         <OrbitControls
           ref={orbitControlsRef}
-          target={cameraStates[currentState].target}
+          target={currentCameraDisplayState.target}
         />
         <ambientLight intensity={0.1} />
         <pointLight
@@ -447,11 +378,11 @@ export function SolarSystemView({
         />
         <Bodies
           solarSystem={solarSystem}
-          schematicMode={schematicMode}
-          hideEarth={currentState === "moon"}
-          showEarthTexture={showEarthTexture}
-          showSunTexture={showSunTexture}
-          showOrbits={showOrbits}
+          hideEarth={sceneOptions.hideEarth}
+          schematicMode={sceneOptions.schematicMode}
+          showEarthTexture={sceneOptions.showEarthTexture}
+          showOrbits={sceneOptions.showOrbits}
+          showSunTexture={sceneOptions.showSunTexture}
         />
         <mesh position={surfacePoint} scale={[20, 20, 20]}>
           <meshBasicMaterial color="red" />
@@ -460,4 +391,4 @@ export function SolarSystemView({
       </Canvas>
     </div>
   );
-}
+});
