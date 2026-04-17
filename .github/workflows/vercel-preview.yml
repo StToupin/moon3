@@ -15,6 +15,7 @@ concurrency:
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
   VITE_BASE_PATH: /
 
 jobs:
@@ -61,16 +62,35 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
+      - name: Validate Vercel credentials
+        run: |
+          if [ -z "${VERCEL_TOKEN}" ]; then
+            echo "::error::Missing VERCEL_TOKEN GitHub secret."
+            exit 1
+          fi
+
+          case "${VERCEL_TOKEN}" in
+            *-*|*.*)
+              echo "::error::VERCEL_TOKEN does not look like a Vercel access token. Store the full token value from Vercel Account Settings -> Tokens, not the token name or ID."
+              exit 1
+              ;;
+          esac
+
+          if [ -z "${VERCEL_ORG_ID}" ] || [ -z "${VERCEL_PROJECT_ID}" ]; then
+            echo "::error::Missing VERCEL_ORG_ID or VERCEL_PROJECT_ID GitHub secret."
+            exit 1
+          fi
+
       - name: Pull Vercel project settings
-        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --token="${VERCEL_TOKEN}"
 
       - name: Build Vercel output
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --token="${VERCEL_TOKEN}"
 
       - name: Deploy preview
         id: deploy
         run: |
-          preview_url="$(vercel deploy --prebuilt --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} --no-color)"
+          preview_url="$(vercel deploy --prebuilt --archive=tgz --token="${VERCEL_TOKEN}" --no-color)"
           echo "preview_url=${preview_url}" >> "$GITHUB_OUTPUT"
           {
             echo "### Vercel Preview"
