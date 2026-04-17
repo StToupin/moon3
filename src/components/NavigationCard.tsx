@@ -1,4 +1,4 @@
-import { useId, type ChangeEvent } from "react";
+import { memo, useId, type ChangeEvent } from "react";
 import { useCollapsibleTransition } from "../hooks/useCollapsibleTransition";
 
 export interface NavigationCardProps {
@@ -96,7 +96,7 @@ function TimelineResetIcon() {
   );
 }
 
-export function NavigationCard({
+export const NavigationCard = memo(function NavigationCard({
   cameraStateTestId,
   className,
   canGoNext,
@@ -283,4 +283,4 @@ export function NavigationCard({
       </div>
     </div>
   );
-}
+});
