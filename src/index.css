@@ -184,7 +184,7 @@ button {
   align-items: flex-start;
   display: flex;
   justify-content: space-between;
-  margin-bottom: 0.46rem;
+  margin-bottom: 0.3rem;
   transition: margin-bottom 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -698,7 +698,7 @@ button {
 
   .tab-panel__header {
     align-items: center;
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.32rem;
   }
 
   .tab-panel--collapsed .tab-panel__header {
