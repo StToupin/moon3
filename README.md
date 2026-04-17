@@ -69,6 +69,30 @@ generic kernels and can regenerate the reduced `de432s.bsp` subset automatically
 npm install
 ```
 
+### Cloud Setup For Offline Startup
+
+For cloud environments where you want a one-time online setup and later offline startup,
+run:
+
+```bash
+./scripts/setup-cloud-offline.sh
+```
+
+This script:
+
+- checks for Node.js 22+ and npm
+- installs missing build dependencies on Debian/Ubuntu (`apt-get`) when needed
+  (`python3`, `tar`, `tcsh`, `emcc`, `curl`)
+- installs JavaScript dependencies with `npm ci`
+- prepares/validates the WASM SPICE runtime and bundled kernels
+- builds the production bundle in `dist`
+
+After it finishes, you can start the already-built app without internet access:
+
+```bash
+npm run preview -- --host 0.0.0.0 --port 4174
+```
+
 ### Start The Dev Server
 
 ```bash
