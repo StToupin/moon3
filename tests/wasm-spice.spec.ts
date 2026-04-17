@@ -372,7 +372,7 @@ test("renders the moon distance card and SVG chart", async ({
   );
 });
 
-test("shows top and bottom mobile cards with the moon distance card collapsed by default", async ({
+test("shows top and bottom mobile bars with the moon distance panel collapsed by default", async ({
   page,
   context,
 }) => {

@@ -121,7 +121,7 @@ export default function App() {
 
         <div className="mobile-bottom-bar">
           <NavigationCard
-            className="app-navigation-card app-navigation-card--mobile"
+            className="app-navigation-bar app-navigation-bar--mobile"
             isCollapsed={layout.isMobileLayout && layout.isNavigationCollapsed}
             isCollapsible={layout.isMobileLayout}
             onToggleCollapse={layout.onToggleNavigationCard}

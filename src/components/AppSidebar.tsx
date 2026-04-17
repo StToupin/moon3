@@ -39,7 +39,7 @@ export const AppSidebar = memo(function AppSidebar({
         <div className="app-sidebar__content">
           <section
             aria-label="Moon Distance"
-            className={`hud-card tab-panel ${
+            className={`app-sidebar__topbar tab-panel ${
               isMoonDistanceCollapsed ? "tab-panel--collapsed" : ""
             } ${isMoonDistanceCollapsible ? "tab-panel--collapsible" : ""}`}
             id="moon-distance-panel"
@@ -111,7 +111,7 @@ export const AppSidebar = memo(function AppSidebar({
         <NavigationCard
           {...navigationCardProps}
           cameraStateTestId="camera-state"
-          className="app-navigation-card app-navigation-card--sidebar"
+          className="app-navigation-bar app-navigation-bar--sidebar"
         />
       </div>
     </aside>

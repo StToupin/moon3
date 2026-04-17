@@ -17,7 +17,7 @@ It renders an interactive 3D view of the Sun, Earth, and Moon, including:
 - an Earth close-up targeted at a geolocated surface point
 - a moon-distance chart with lunar phase markers and supermoon highlighting
 - time scrubbing and playback for exploring motion over time
-- desktop and mobile control layouts with collapsible cards
+- desktop and mobile top and bottom control bars, with collapsible mobile sections
 
 No backend is required once the app is built. Ephemeris calculations happen client-side.
 To keep the browser payload smaller, Earth rotation uses the generic `IAU_EARTH`

@@ -125,9 +125,7 @@ export const NavigationCard = memo(function NavigationCard({
   const toolbarId = useId();
   const { ref: toolbarRef, shouldRender: shouldRenderToolbar } =
     useCollapsibleTransition(!isCollapsed);
-  const timelineClassName = ["hud-card", "hud-card--timeline", className]
-    .filter(Boolean)
-    .join(" ");
+  const timelineClassName = ["timeline-panel", className].filter(Boolean).join(" ");
   const timelineDateLabel =
     dayOffset === 0
       ? displayDate
