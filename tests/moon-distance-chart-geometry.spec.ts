@@ -1,11 +1,12 @@
-import { expect, test } from "@playwright/test";
+import test from "node:test";
+import assert from "node:assert/strict";
 import {
   buildMoonDistanceChartGeometry,
   createMoonDistancePhaseHoverState,
   resolveMoonDistanceChartHoverState,
   SVG_HEIGHT,
   SVG_WIDTH,
-} from "../src/components/moonDistanceChartGeometry";
+} from "../src/components/moonDistanceChartGeometry.ts";
 
 const series = {
   referenceTimestamp: "2026-04-15T00:00:00.000Z",
@@ -39,20 +40,20 @@ const series = {
 test("builds stable chart geometry from the series", () => {
   const geometry = buildMoonDistanceChartGeometry(series);
 
-  expect(geometry).not.toBeNull();
-  expect(geometry?.points).toHaveLength(3);
-  expect(geometry?.phaseMarkers).toHaveLength(1);
-  expect(geometry?.xTickIndexes).toEqual([0, 1, 2]);
-  expect(geometry?.yTicks).toHaveLength(5);
-  expect(geometry?.currentPoint.sample.dayOffset).toBe(0);
-  expect(geometry?.linePath).toContain("M");
-  expect(geometry?.areaPath).toContain("Z");
+  assert.notEqual(geometry, null);
+  assert.equal(geometry?.points.length, 3);
+  assert.equal(geometry?.phaseMarkers.length, 1);
+  assert.deepEqual(geometry?.xTickIndexes, [0, 1, 2]);
+  assert.equal(geometry?.yTicks.length, 5);
+  assert.equal(geometry?.currentPoint.sample.dayOffset, 0);
+  assert.ok(geometry?.linePath.includes("M"));
+  assert.ok(geometry?.areaPath.includes("Z"));
 });
 
 test("resolves hover states against the memoized geometry", () => {
   const geometry = buildMoonDistanceChartGeometry(series);
 
-  expect(geometry).not.toBeNull();
+  assert.notEqual(geometry, null);
   if (!geometry) {
     throw new Error("Expected geometry");
   }
@@ -66,11 +67,11 @@ test("resolves hover states against the memoized geometry", () => {
     500,
   );
 
-  expect(hoveredSample.kind).toBe("sample");
+  assert.equal(hoveredSample.kind, "sample");
   if (hoveredSample.kind !== "sample") {
     throw new Error("Expected sample hover state");
   }
-  expect(hoveredSample.pointIndex).toBe(0);
+  assert.equal(hoveredSample.pointIndex, 0);
 
   const phaseHover = createMoonDistancePhaseHoverState(geometry, 0, 1000, 500);
   const hoveredPhase = resolveMoonDistanceChartHoverState(
@@ -81,10 +82,10 @@ test("resolves hover states against the memoized geometry", () => {
     500,
   );
 
-  expect(hoveredPhase.kind).toBe("phase");
+  assert.equal(hoveredPhase.kind, "phase");
   if (hoveredPhase.kind !== "phase") {
     throw new Error("Expected phase hover state");
   }
-  expect(hoveredPhase.phaseEventIndex).toBe(0);
-  expect(phaseHover.chartX).toBeGreaterThan(0);
+  assert.equal(hoveredPhase.phaseEventIndex, 0);
+  assert.ok(phaseHover.chartX > 0);
 });

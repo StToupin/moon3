@@ -11,6 +11,7 @@
     "prebuild": "npm run prepare:spice",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "test:unit": "node --test src/cameraViews.test.ts tests/moon-distance-chart-geometry.spec.ts",
     "pretest:e2e": "npm run prepare:spice",
     "test:e2e": "playwright test"
   },
